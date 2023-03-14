@@ -26,7 +26,7 @@
 import config from './config';
 import { Process, spinalCore , FileSystem } from "spinal-core-connectorjs_type";
 import { serviceTicketPersonalized, spinalServiceTicket } from "spinal-service-ticket";
-import { SpinalGraphService, SpinalContext } from "spinal-env-viewer-graph-service";
+import { SpinalGraphService, SpinalContext, SpinalNodeRef } from "spinal-env-viewer-graph-service";
 import { attributeService } from 'spinal-env-viewer-plugin-documentation-service';
 import { 
     spinalAnalyticService,
@@ -44,9 +44,13 @@ import {
 
 class SpinalMain {
     constructor() {}
+
+    private handledAnalytics = [];
     public init() {
+        this.handledAnalytics = [];
         console.log("Init connection to HUB...");
         const url = `http://${config.userId}:${config.userPassword}@${config.hubHost}:${config.hubPort}/`;
+        
         return new Promise((resolve, reject) => {
             spinalCore.load(spinalCore.connect(url), config.digitalTwinPath, async (graph: any) => {
                 await SpinalGraphService.setGraph(graph);
@@ -162,16 +166,12 @@ class SpinalMain {
 
     }
 
-    public async initJob(){
-        const contexts = spinalAnalyticService.getContexts();
-        for (const context of contexts){
-            const analytics = await spinalAnalyticService.getAllAnalytics(context.id.get());
-            for (const analytic of analytics){
-                // si intervalTime = 0 => method COV
-                const config = await spinalAnalyticService.getConfig(analytic.id.get());
+    private async handleAnalytic(analytic : SpinalNodeRef) {
+        const config = await spinalAnalyticService.getConfig(analytic.id.get());
                 console.log(config.intervalTime.get());
                 if (config.intervalTime.get() === 0){
                     const entities = await spinalAnalyticService.getWorkingFollowedEntities(analytic.id.get());
+                    console.log("entities",entities, " of analytic ", analytic.name.get());
                     for (const entity of entities){
                         const entryDataModels = await spinalAnalyticService.getEntryDataModelsFromFollowedEntity(analytic.id.get(),entity);
                         for (const entryDataModel of entryDataModels){
@@ -193,6 +193,14 @@ class SpinalMain {
                         },config.intervalTime.get())
                     }
                 }
+    }
+    public async initJob(){
+        const contexts = spinalAnalyticService.getContexts();
+        for (const context of contexts){
+            const analytics = await spinalAnalyticService.getAllAnalytics(context.id.get());
+            for (const analytic of analytics){
+                // si intervalTime = 0 => method COV
+                this.handleAnalytic(analytic);
             }
         }
     }
