@@ -46,6 +46,7 @@ class SpinalMain {
     constructor() {}
 
     private handledAnalytics = [];
+
     public init() {
         this.handledAnalytics = [];
         console.log("Init connection to HUB...");
@@ -169,9 +170,8 @@ class SpinalMain {
     private async handleAnalytic(analytic : SpinalNodeRef) {
         const config = await spinalAnalyticService.getConfig(analytic.id.get());
                 console.log(config.intervalTime.get());
-                if (config.intervalTime.get() === 0){
+                if (config.intervalTime.get() === '0' || config.intervalTime.get() === 0){
                     const entities = await spinalAnalyticService.getWorkingFollowedEntities(analytic.id.get());
-                    console.log("entities",entities, " of analytic ", analytic.name.get());
                     for (const entity of entities){
                         const entryDataModels = await spinalAnalyticService.getEntryDataModelsFromFollowedEntity(analytic.id.get(),entity);
                         for (const entryDataModel of entryDataModels){
@@ -194,15 +194,23 @@ class SpinalMain {
                     }
                 }
     }
+    
     public async initJob(){
         const contexts = spinalAnalyticService.getContexts();
         for (const context of contexts){
             const analytics = await spinalAnalyticService.getAllAnalytics(context.id.get());
             for (const analytic of analytics){
+                console.log("Handling Analytic : ",analytic.name.get());
+                if(this.handledAnalytics.includes(analytic.id.get())){
+                    console.log("Already handled");
+                    continue;
+                } 
                 // si intervalTime = 0 => method COV
                 this.handleAnalytic(analytic);
+                this.handledAnalytics.push(analytic.id.get());
             }
         }
+        console.log("////////////////////////// INIT JOB DONE ////////////////////////////")
     }
 
     /*public async initJob(){
@@ -374,8 +382,15 @@ async function Main(){
     const spinalMain = new SpinalMain();
     await spinalMain.init();
     await spinalMain.initContext();
-    //await spinalMain.createTestEnvironment2();
+
     await spinalMain.initJob();
+
+    const timer = parseInt(process.env.UPDATE_ANALYTIC_QUEUE_TIMER)
+    setInterval(async () =>{
+        await spinalMain.initJob();
+    }, timer);
+
+
     /*
     // await spinalMain.job();
     spinalMain.initJob();
