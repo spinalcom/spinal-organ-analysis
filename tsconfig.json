@@ -7,7 +7,9 @@
     "declarationDir": "./declarations",
     "sourceMap": true,
     "moduleResolution": "node",
-    "removeComments": true
+    "removeComments": true,
+    "skipLibCheck": true,
+    "skipDefaultLibCheck": true
   },
   "include": [
     "src/**/*.ts"

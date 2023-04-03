@@ -24,6 +24,7 @@
 
 
 import config from './config';
+import ConfigFile from "spinal-lib-organ-monitoring";
 import { Process, spinalCore , FileSystem } from "spinal-core-connectorjs_type";
 import { serviceTicketPersonalized, spinalServiceTicket } from "spinal-service-ticket";
 import { SpinalGraphService, SpinalContext, SpinalNodeRef } from "spinal-env-viewer-graph-service";
@@ -40,7 +41,6 @@ import {
     TRACK_METHOD
 } from 'spinal-model-analysis';
 
-//import { serviceAnalysis } from 'spinal-service-analysis';
 
 class SpinalMain {
     constructor() {}
@@ -50,10 +50,11 @@ class SpinalMain {
     public init() {
         this.handledAnalytics = [];
         console.log("Init connection to HUB...");
-        const url = `http://${config.userId}:${config.userPassword}@${config.hubHost}:${config.hubPort}/`;
-        
+        const url = `${process.env.SPINALHUB_PROTOCOL}://${process.env.USER_ID}:${process.env.USER_PASSWORD}@${process.env.SPINALHUB_IP}:${process.env.SPINALHUB_PORT}/`;
         return new Promise((resolve, reject) => {
-            spinalCore.load(spinalCore.connect(url), config.digitalTwinPath, async (graph: any) => {
+            const conn = spinalCore.connect(url);
+            //ConfigFile.init(conn, process.env.ORGAN_NAME + "-config", process.env.SPINALHUB_IP, process.env.SPINALHUB_PROTOCOL, parseInt(process.env.SPINALHUB_PORT));
+            spinalCore.load(conn, config.digitalTwinPath, async (graph: any) => {
                 await SpinalGraphService.setGraph(graph);
                 console.log("Connection successfull !");
                 resolve(graph)
@@ -62,6 +63,7 @@ class SpinalMain {
                 reject()
             })
         });
+        
     }
     public async getSpinalGeo(): Promise<SpinalContext<any>> {
         const context = SpinalGraphService.getContext("spatial");
@@ -75,96 +77,6 @@ class SpinalMain {
           SpinalGraphService._addNode(node);
           return false;
         });
-    }
-
-    
-
-
-    public async createTestEnvironment() {
-        const context = await spinalAnalyticService.createContext("testContext");
-        const IEntityInfo : IEntity = {
-            name: "Pièces",
-            standard_name: "Rooms",
-            entityType: ENTITY_TYPES.ROOM,
-            description:""
-        };
-        const IAnalytic: IAnalytic = {
-            name: "Température anormale",
-            description :""
-        };
-
-        const IConfig : IConfig = {
-            algorithm: ALGORITHMS.THRESHOLD_ABOVE,
-            resultType: ANALYTIC_RESULT_TYPE.TICKET,
-            resultName:"Température anormale",
-            intervalTime: 0
-
-        };
-        const algorithmParameters = [
-            { name: "p1" , value: 15 , type: "number"},
-        ];
-        const ITrackingMethod : ITrackingMethod = {
-            name: "TrackingMethod",
-            trackMethod: TRACK_METHOD.CONTROL_ENDPOINT_NAME_FILTER,
-            filterValue: "Température"
-        }
-
-        const entityInfo = await spinalAnalyticService.addEntity(IEntityInfo,context.id.get());
-        const analyticInfo = await spinalAnalyticService.addAnalytic(IAnalytic,context.id.get(),entityInfo.id.get());
-        const trackingMethodInfo = await spinalAnalyticService.addInputTrackingMethod(ITrackingMethod,context.id.get(),analyticInfo.id.get());
-        const configInfo = await spinalAnalyticService.addConfig(IConfig,algorithmParameters,analyticInfo.id.get(),context.id.get());
-        /*const followedEntityInfo = await spinalAnalyticService.addInputLinkToFollowedEntity(context.id.get(),
-        analyticInfo.id.get(),"SpinalNode-69e8c850-4d04-ace6-7db2-3e3bf4e4d944-1825e3c67cc");
-        */
-
-        // groupe de salles ou étage
-        const followedEntityInfo = await spinalAnalyticService.addInputLinkToFollowedEntity(context.id.get(),
-        analyticInfo.id.get(),"SpinalNode-277d9c8d-efa0-8cba-7fa5-3632cb307207-1825e3c98c3");
-
-
-    }
-
-    public async createTestEnvironment2() {
-        const context = await spinalAnalyticService.createContext("testContext");
-        const IEntityInfo : IEntity = {
-            name: "Pièces",
-            standard_name: "Rooms",
-            entityType: ENTITY_TYPES.ROOM,
-            description:""
-        };
-        const IAnalytic: IAnalytic = {
-            name: "Régulation de la température",
-            description :""
-        };
-
-        const IConfig : IConfig = {
-            algorithm: ALGORITHMS.PUTVALUE,
-            resultType: ANALYTIC_RESULT_TYPE.MODIFY_CONTROL_ENDPOINT,
-            resultName:"Régulation de la température",
-            intervalTime: 0
-
-        };
-        const algorithmParameters = [
-            { name: "p1" , value: 22 , type: "number"},
-        ];
-        const ITrackingMethod : ITrackingMethod = {
-            name: "TrackingMethod",
-            trackMethod: TRACK_METHOD.CONTROL_ENDPOINT_NAME_FILTER,
-            filterValue: "Température"
-        }
-
-        const entityInfo = await spinalAnalyticService.addEntity(IEntityInfo,context.id.get());
-        const analyticInfo = await spinalAnalyticService.addAnalytic(IAnalytic,context.id.get(),entityInfo.id.get());
-        const trackingMethodInfo = await spinalAnalyticService.addInputTrackingMethod(ITrackingMethod,context.id.get(),analyticInfo.id.get());
-        const configInfo = await spinalAnalyticService.addConfig(IConfig,algorithmParameters,analyticInfo.id.get(),context.id.get());
-        /*const followedEntityInfo = await spinalAnalyticService.addInputLinkToFollowedEntity(context.id.get(),
-        analyticInfo.id.get(),"SpinalNode-69e8c850-4d04-ace6-7db2-3e3bf4e4d944-1825e3c67cc");
-        */
-
-        // groupe de salles ou étage
-        const followedEntityInfo = await spinalAnalyticService.addInputLinkToFollowedEntity(context.id.get(),
-        analyticInfo.id.get(),"SpinalNode-277d9c8d-efa0-8cba-7fa5-3632cb307207-1825e3c98c3");
-
     }
 
     private async handleAnalytic(analytic : SpinalNodeRef) {
