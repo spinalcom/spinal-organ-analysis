@@ -202,7 +202,6 @@ class SpinalMain {
             for (const analytic of analytics){
                 console.log("Handling Analytic : ",analytic.name.get());
                 if(this.handledAnalytics.includes(analytic.id.get())){
-                    console.log("Already handled");
                     continue;
                 } 
                 // si intervalTime = 0 => method COV
@@ -210,172 +209,7 @@ class SpinalMain {
                 this.handledAnalytics.push(analytic.id.get());
             }
         }
-        console.log("////////////////////////// INIT JOB DONE ////////////////////////////")
     }
-
-    /*public async initJob(){
-        const contexts = spinalAnalyticService.getContexts();
-        for (const context of contexts){
-            const analytics = await spinalAnalyticService.getAllAnalytics(context.id.get());
-            for (const analytic of analytics){
-                const entryDataModels = await spinalAnalyticService.applyTrackingMethodLegacy(analytic.id.get());
-                for (const entryDataModel of entryDataModels){
-                    const valueModel = (await entryDataModel.element.load());
-                    valueModel.bind(
-                        () => {
-                            console.log("Value changed, starting analysis...");
-                            spinalAnalyticService.doAnalysis(analytic.id.get());
-                        },false
-                    )
-                    
-                }
-                
-                //await spinalAnalyticService.doAnalysis(completeAnalysisModel);
-            }
-        }
-
-    }*/
-
-    /*public async initJob(){
-        // console.log(serviceAnalysis);
-        console.log("////////////////////////////////////////   DEBUT ANALYSE : " +new Date(Date.now())+     "       ////////////////////////////////////////");
-        
-        let contexts = await serviceAnalysis.getContext();
-        for(let context of contexts){
-            let analysisProcesses = await serviceAnalysis.getAllAnalysisProcesses(context.getId());
-            for(let analysisProcess of analysisProcesses){
-                let completeAnalysisModel = await serviceAnalysis.getCompleteAnalysis(context.getId(), analysisProcess.id.get());
-                // console.log(completeAnalysisModel);
-                await serviceAnalysis.launchCompleteAnalysis(completeAnalysisModel);
-            }
-        }
-        console.log("////////////////////////////////////////   FIN ANALYSE : " +new Date(Date.now())+     "     ////////////////////////////////////////");
-    }
-
-    public async job(){
-        let workflows = SpinalGraphService.getContextWithType("SpinalSystemServiceTicket");
-        for(let workflow of workflows){
-            if(workflow.info.subType != undefined){
-                if(workflow.info.subType.get() == "Alarm"){
-                    let processes = await serviceTicketPersonalized.getAllProcess(workflow.info.id.get());
-                    for(let pro of processes){
-                        let analysisProcess = await this.getAnalysisProcess(pro.id.get(), workflow.info.id.get());
-                        console.log(" ////////////// JOB ///////////// ");
-                        console.log(analysisProcess);
-                        console.log(" ////////////// END JOB ////////////");
-                        // await this.launchAnalysisProcess(analysisProcess);
-                    }
-                }
-            }
-        }
-    }
-
-    public async getAnalysisProcess(parentId:string, contextId: string):Promise<any>{
-        let returnObj = {
-            processId: parentId,
-            contextId: contextId,
-            analysisName: "",
-            analysisResult: "",
-            entityId: "",
-            entityType: "",
-            analysisProcess:{
-                name: "",
-                config: []
-            }
-        };
-
-        let analysis = await SpinalGraphService.getChildren(parentId, ["hasAnalysisProcess"]);
-        console.log(analysis);
-        if(analysis.length !=0){
-            returnObj.analysisName = analysis[0].name.get();
-            // returnObj.analysisResult = analysis[0].result.get();
-            returnObj.analysisResult = "Ticket";
-            console.log(analysis[0].id.get());
-            let entity = await SpinalGraphService.getChildren(analysis[0].id.get(), ["hasFollowedEntity"]);
-            console.log(entity)
-            
-            if(entity.length !=0){
-                returnObj.entityId = entity[0].id.get();
-                returnObj.entityType = entity[0].type.get();
-            }
-            let analysisProcess = await SpinalGraphService.getChildren(analysis[0].id.get(), ["hasAnalytic"]);
-            if(analysisProcess.length !=0){
-                returnObj.analysisProcess.name = analysisProcess[0].name.get();
-                let analysisProcessNode = SpinalGraphService.getRealNode(analysisProcess[0].id.get());
-                (<any>SpinalGraphService)._addNode(analysisProcessNode);
-                let attributes = await attributeService.getAllAttributes(analysisProcessNode);
-                if(attributes.length !=0){
-                    for(let attr of attributes){
-                        returnObj.analysisProcess.config.push({
-                            name: attr.label.get(),
-                            type: attr.type.get(),
-                            value: attr.value.get()
-                        });
-                    }
-                }
-            }
-        }
-        return returnObj;
-    }
-
-    public async launchAnalysisProcess(process):Promise<any>{
-        
-        let tickets = [];
-        let typeSplitted = process.entityType.split("Group");
-        let relationName = ["groupHas" + typeSplitted[0]];
-        let children = await SpinalGraphService.getChildren(process.entityId, relationName);
-
-        for(let child of children){
-            if(process.analysisProcess.name == "THRESHOLD_BETWEEN"){
-                let seuil1 = parseInt(process.analysisProcess.config[0].value);
-                let seuil2 = parseInt(process.analysisProcess.config[1].value);
-
-                let cp = await this.findControlPoint(child.id.get(), "Temperature moyenne");
-                if(cp != undefined){
-                    let cpNode = SpinalGraphService.getRealNode(cp.id.get());
-                    (<any>SpinalGraphService)._addNode(cpNode);
-                    let currentValue = await attributeService.findOneAttributeInCategory(cpNode, "default", "currentValue");
-                    if(currentValue != -1){
-                        
-                        let val = currentValue.value.get();
-                        if(val < seuil1 || val >seuil2){
-                            console.log(currentValue.value.get() + " °C");
-                            let ticketInfos = {
-                                name: process.analysisName + " : " + child.name.get(),
-                                // stepId: "SpinalNode-743bcc70-9194-6d44-8c5d-94ee7bb549e4-180d6f8d6ee",
-                                processId: process.processId
-                            }
-                            let ticket = await serviceTicketPersonalized.addTicket(ticketInfos, process.processId, process.contextId, child.id.get());
-                            tickets.push(ticket);
-                            
-                            console.log("1 : " + child.name.get());                  
-                        }
-                    }
-                    else{
-                        console.log("currentValue not found, do smth !")
-                    }
-                }
-            }
-        }
-        console.log(tickets);
-    }
-
-    public async findControlPoint(parentId, name){
-        let controlPoints = await SpinalGraphService.getChildren(parentId, ["hasControlPoints"]);
-        if(controlPoints.length !=0){
-            for(let cp of controlPoints){
-                let bmsEndpoints = await SpinalGraphService.getChildren(cp.id.get(), ["hasBmsEndpoint"]);
-                if(bmsEndpoints.length !=0){
-                    for(let bms of bmsEndpoints){
-                        if(bms.name.get() == name){
-                            return bms;
-                        }
-                    }
-                }
-            }
-        }
-        return undefined;
-    }*/
 }
 
 async function Main(){
@@ -390,17 +224,6 @@ async function Main(){
         await spinalMain.initJob();
     }, timer);
 
-
-    /*
-    // await spinalMain.job();
-    spinalMain.initJob();
-    setInterval(()=> {
-        /////////////////// DEBUT ///////////////////////
-        spinalMain.initJob();
-        ///////////////////  FIN  ///////////////////////
-}, 150000) // 300000 = 5mn
-    // await spinalMain.initJob();
-    */
 }
 Main();
 
