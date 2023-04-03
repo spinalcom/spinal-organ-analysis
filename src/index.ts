@@ -112,10 +112,10 @@ class SpinalMain {
         for (const context of contexts){
             const analytics = await spinalAnalyticService.getAllAnalytics(context.id.get());
             for (const analytic of analytics){
-                console.log("Handling Analytic : ",analytic.name.get());
                 if(this.handledAnalytics.includes(analytic.id.get())){
                     continue;
                 } 
+                console.log("Handling Analytic : ",analytic.name.get());
                 // si intervalTime = 0 => method COV
                 this.handleAnalytic(analytic);
                 this.handledAnalytics.push(analytic.id.get());
