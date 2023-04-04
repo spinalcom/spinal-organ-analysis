@@ -23,38 +23,31 @@
  */
 
 
-import config from './config';
 import ConfigFile from "spinal-lib-organ-monitoring";
 import { Process, spinalCore , FileSystem } from "spinal-core-connectorjs_type";
-import { serviceTicketPersonalized, spinalServiceTicket } from "spinal-service-ticket";
 import { SpinalGraphService, SpinalContext, SpinalNodeRef } from "spinal-env-viewer-graph-service";
-import { attributeService } from 'spinal-env-viewer-plugin-documentation-service';
 import { 
     spinalAnalyticService,
-    IAnalytic,
-    IEntity,
-    IConfig,
-    ITrackingMethod,
-    ENTITY_TYPES,
-    ALGORITHMS,
-    ANALYTIC_RESULT_TYPE,
-    TRACK_METHOD
 } from 'spinal-model-analysis';
-
+require('dotenv').config();
 
 class SpinalMain {
-    constructor() {}
+
+
+    constructor() {
+
+    }
 
     private handledAnalytics = [];
 
     public init() {
         this.handledAnalytics = [];
-        console.log("Init connection to HUB...");
+        console.log("Init connection to HUB...");        
         const url = `${process.env.SPINALHUB_PROTOCOL}://${process.env.USER_ID}:${process.env.USER_PASSWORD}@${process.env.SPINALHUB_IP}:${process.env.SPINALHUB_PORT}/`;
+        const conn = spinalCore.connect(url);
+        //ConfigFile.init(conn, process.env.ORGAN_NAME + "-config", process.env.SPINALHUB_IP, process.env.SPINALHUB_PROTOCOL, parseInt(process.env.SPINALHUB_PORT));
         return new Promise((resolve, reject) => {
-            const conn = spinalCore.connect(url);
-            //ConfigFile.init(conn, process.env.ORGAN_NAME + "-config", process.env.SPINALHUB_IP, process.env.SPINALHUB_PROTOCOL, parseInt(process.env.SPINALHUB_PORT));
-            spinalCore.load(conn, config.digitalTwinPath, async (graph: any) => {
+            spinalCore.load(conn, process.env.DIGITALTWIN_PATH, async (graph: any) => {
                 await SpinalGraphService.setGraph(graph);
                 console.log("Connection successfull !");
                 resolve(graph)
@@ -127,14 +120,14 @@ class SpinalMain {
 async function Main(){
     const spinalMain = new SpinalMain();
     await spinalMain.init();
+    
     await spinalMain.initContext();
 
     await spinalMain.initJob();
 
-    const timer = parseInt(process.env.UPDATE_ANALYTIC_QUEUE_TIMER)
     setInterval(async () =>{
         await spinalMain.initJob();
-    }, timer);
+    }, parseInt(process.env.UPDATE_ANALYTIC_QUEUE_TIMER));
 
 }
 Main();
