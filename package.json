@@ -6,21 +6,27 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "rm -rf dist declarations && tsc",
-    "start": "npm run build && node dist/index.js"
+    "start": "npm run build && node dist/index.js",
+    "start:dev": "rm -rf node_modules/spinal-model-analysis && npm i && npm run build && node dist/index.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "chart.js": "^4.2.1",
     "dotenv": "^15.0.0",
+    "ejs": "^3.1.9",
     "spinal-core-connectorjs_type": "git+https://github.com/spinalcom/spinal-core-connectorjs_type.git",
     "spinal-env-viewer-graph-service": "git+https://github.com/spinalcom/Spinal-Graph-Service.git",
+    "spinal-env-viewer-plugin-documentation-service": "git+https://github.com/spinalcom/spinal-env-viewer-plugin-documentation-service.git",
     "spinal-lib-organ-monitoring": "git+https://github.com/spinalcom/spinal-lib-organ-monitoring.git",
+    "spinal-model-analysis": "git+https://github.com/spinalcom/spinal-model-analysis.git",
     "spinal-model-graph": "git+https://github.com/spinalcom/spinal-model-graph.git",
-    "spinal-model-analysis": "git+https://github.com/spinalcom/spinal-model-analysis.git"
+    "spinal-service-ticket": "git+https://github.com/spinalcom/spinal-service-ticket.git"
   },
   "devDependencies": {
+    "@types/ejs": "^3.1.2",
     "@types/node": "^18.11.18",
-    "typescript": "4.6.4"
+    "typescript": "^4.9.5"
   }
 }

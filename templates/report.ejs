@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Analysis Report</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </head>
+  <body>
+    <h1>Analysis Report</h1>
+    <p>Total Analyses: <%= totalAnalyses %></p>
+    <p>Average Duration: <%= averageDuration.toFixed(2) %>ms</p>
+    <div>
+      <canvas id="analysisChart"></canvas>
+    </div>
+    <script>
+        const analysisData =  <%- JSON.stringify(durations) %>;
+        const minDuration = Math.min(...analysisData);
+        const maxDuration = Math.max(...analysisData);
+        const horizontalLinePlugin = {
+          id: 'horizontalLinePlugin',
+          afterDraw: (chart, args, options) => {
+              const ctx = chart.ctx;
+              const xAxis = chart.scales.x;
+              const yAxis = chart.scales.y;
+
+              // Draw minimum line
+              ctx.save();
+              ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
+              ctx.beginPath();
+              ctx.moveTo(xAxis.left, yAxis.getPixelForValue(minDuration));
+              ctx.lineTo(xAxis.right, yAxis.getPixelForValue(minDuration));
+              ctx.stroke();
+              ctx.restore();
+
+              // Draw maximum line
+              ctx.save();
+              ctx.strokeStyle = 'rgba(0, 0, 255, 0.5)';
+              ctx.beginPath();
+              ctx.moveTo(xAxis.left, yAxis.getPixelForValue(maxDuration));
+              ctx.lineTo(xAxis.right, yAxis.getPixelForValue(maxDuration));
+              ctx.stroke();
+              ctx.restore();
+            },
+        };
+
+        Chart.register(horizontalLinePlugin);
+
+        const ctx = document.getElementById('analysisChart').getContext('2d');
+        const chart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: analysisData.map((_, index) => `Analysis ${index + 1}`),
+            datasets: [
+              {
+                label: 'Analysis Duration (ms)',
+                data: analysisData,
+                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                borderColor: 'rgba(75, 192, 192, 1)',
+                borderWidth: 1,
+                tension: 0.1,
+              },
+            ],
+          },
+          options: {
+            scales: {
+              y: {
+                beginAtZero: true,
+              },
+            },
+            plugins: {
+        afterDraw: (chart) => {
+          const ctx = chart.ctx;
+          const xAxis = chart.scales.x;
+          const yAxis = chart.scales.y;
+
+          // Draw minimum line
+          ctx.save();
+          ctx.strokeStyle = 'rgba(0, 0, 255, 0.5)';
+          ctx.beginPath();
+          ctx.moveTo(xAxis.left, yAxis.getPixelForValue(minDuration));
+          ctx.lineTo(xAxis.right, yAxis.getPixelForValue(minDuration));
+          ctx.stroke();
+          ctx.restore();
+
+          // Draw maximum line
+          ctx.save();
+          ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
+          ctx.beginPath();
+          ctx.moveTo(xAxis.left, yAxis.getPixelForValue(maxDuration));
+          ctx.lineTo(xAxis.right, yAxis.getPixelForValue(maxDuration));
+          ctx.stroke();
+          ctx.restore();
+        },
+      },
+          },
+        });
+    </script>
+  </body>
+</html>
