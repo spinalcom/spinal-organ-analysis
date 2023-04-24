@@ -29,7 +29,7 @@ import {
   SpinalContext,
   SpinalNodeRef,
 } from 'spinal-env-viewer-graph-service';
-import { spinalAnalyticService } from 'spinal-model-analysis';
+import { spinalAnalyticService, CATEGORY_ATTRIBUTE_ALGORTHM_PARAMETERS } from 'spinal-model-analysis';
 
 import * as ejs from 'ejs';
 import * as path from 'path';
@@ -89,7 +89,8 @@ class SpinalMain {
 
   private async handleAnalytic(analytic: SpinalNodeRef) {
     const config = await spinalAnalyticService.getConfig(analytic.id.get());
-    if (config.intervalTime.get() === '0' || config.intervalTime.get() === 0) {
+    const configParams = await spinalAnalyticService.getAttributesFromNode(config.id.get(),CATEGORY_ATTRIBUTE_ALGORTHM_PARAMETERS);
+    if (configParams['intervalTime'] === '0' || configParams['intervalTime'] === 0) {
       const entities = await spinalAnalyticService.getWorkingFollowedEntities(
         analytic.id.get()
       );
@@ -127,7 +128,7 @@ class SpinalMain {
           const elapsedTime = endTime - startTime;
           console.log(`Analysis completed in ${elapsedTime.toFixed(2)}ms`);
           this.durations.push(elapsedTime);
-        }, config.intervalTime.get());
+        }, configParams['intervalTime']);
       }
     }
   }

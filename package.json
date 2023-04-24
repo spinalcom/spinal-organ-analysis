@@ -1,13 +1,14 @@
 {
   "name": "spinal-organ-analysis",
-  "version": "1.6.0",
+  "version": "2.0.0",
   "description": "Organ that handles analysis routines",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "rm -rf dist declarations && tsc",
+    "build:dev": "rm -rf node_modules/spinal-model-analysis && cp -r ../../bos_covivio_01092022/spinal-viewer_covivio_10100/analysis/spinal-model-analysis ./node_modules && npm run build",
     "start": "npm run build && node dist/index.js",
-    "start:dev": "rm -rf node_modules/spinal-model-analysis && npm i && npm run build && node dist/index.js"
+    "start:dev": "npm run build:dev && node dist/index.js"
   },
   "keywords": [],
   "author": "",

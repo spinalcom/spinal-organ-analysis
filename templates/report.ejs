@@ -8,7 +8,8 @@
   </head>
   <body>
     <h1>Analysis Report</h1>
-    <p>Total Analyses: <%= totalAnalyses %></p>
+    <p>Total Analyses Processes: <%= totalAnalyses %></p>
+    <p>Successful Analyses: <%= durations.length %></p>
     <p>Average Duration: <%= averageDuration.toFixed(2) %>ms</p>
     <div>
       <canvas id="analysisChart"></canvas>
