@@ -186,8 +186,6 @@ async function Main() {
   const spinalMain = new SpinalMain();
   await spinalMain.init();
 
-  //await spinalMain.initContext();
-
   await spinalMain.initJob();
 
   setInterval(async () => {
