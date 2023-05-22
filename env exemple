@@ -1,0 +1,10 @@
+#exemple of env file
+USER_ID=168
+USER_PASSWORD="xxxxxxxx"
+SPINALHUB_IP=127.0.0.1
+SPINALHUB_PROTOCOL="http"
+SPINALHUB_PORT=xxxxx
+DIGITALTWIN_PATH="/__users__/admin/Digital twin VF"
+UPDATE_ANALYTIC_QUEUE_TIMER = 10000 #Frenquency at which the organ will look for new analytics to handle
+ORGAN_NAME="Analytic_Organ"
+REPORT_TIMER = 30000 #Frenquency at which the organ will produce a report.

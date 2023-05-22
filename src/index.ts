@@ -95,12 +95,11 @@ class SpinalMain {
         analytic.id.get()
       );
       for (const entity of entities) {
-        const entryDataModels =
+        const entryDataModel =
           await spinalAnalyticService.getEntryDataModelsFromFollowedEntity(
             analytic.id.get(),
             entity
           );
-        for (const entryDataModel of entryDataModels) {
           const valueModel = await entryDataModel.element.load();
           valueModel.bind(() => {
             const startTime = performance.now();
@@ -114,7 +113,6 @@ class SpinalMain {
             });
               
           }, false);
-        }
       }
     } else {
       const entities = await spinalAnalyticService.getWorkingFollowedEntities(

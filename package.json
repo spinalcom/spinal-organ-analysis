@@ -1,6 +1,6 @@
 {
   "name": "spinal-organ-analysis",
-  "version": "2.0.0",
+  "version": "2.2.0",
   "description": "Organ that handles analysis routines",
   "main": "index.js",
   "scripts": {
@@ -22,6 +22,7 @@
     "spinal-env-viewer-plugin-documentation-service": "git+https://github.com/spinalcom/spinal-env-viewer-plugin-documentation-service.git",
     "spinal-lib-organ-monitoring": "git+https://github.com/spinalcom/spinal-lib-organ-monitoring.git",
     "spinal-model-analysis": "git+https://github.com/spinalcom/spinal-model-analysis.git",
+    "spinal-model-bmsnetwork": "git+https://github.com/spinalcom/spinal-model-bmsnetwork.git",
     "spinal-model-graph": "git+https://github.com/spinalcom/spinal-model-graph.git",
     "spinal-service-ticket": "git+https://github.com/spinalcom/spinal-service-ticket.git"
   },
