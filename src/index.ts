@@ -95,24 +95,27 @@ class SpinalMain {
         analytic.id.get()
       );
       for (const entity of entities) {
-        const entryDataModel =
+        const entryDataModels =
           await spinalAnalyticService.getEntryDataModelsFromFollowedEntity(
             analytic.id.get(),
             entity
           );
-          const valueModel = await entryDataModel.element.load();
-          valueModel.bind(() => {
-            const startTime = performance.now();
-            console.log('Value changed, starting analysis...');
-            spinalAnalyticService.doAnalysis(analytic.id.get(), entity).then(() => {
-              const endTime = performance.now();
-              const elapsedTime = endTime - startTime;
-              console.log(`Analysis completed in ${elapsedTime.toFixed(2)}ms`);
-              this.durations.push(elapsedTime);
-            
-            });
+          for (const entryDataModel of entryDataModels) {
+            const valueModel = await entryDataModel.element.load();
+            console.log('ValueModel current value : ', valueModel.currentValue.get())
+            valueModel.currentValue.bind(() => {
+              const startTime = performance.now();
+              console.log('Value changed, starting analysis...');
+              spinalAnalyticService.doAnalysis(analytic.id.get(), entity).then(() => {
+                const endTime = performance.now();
+                const elapsedTime = endTime - startTime;
+                console.log(`Analysis completed in ${elapsedTime.toFixed(2)}ms`);
+                this.durations.push(elapsedTime);
               
-          }, false);
+              });
+                
+            }, false);
+        }
       }
     } else {
       const entities = await spinalAnalyticService.getWorkingFollowedEntities(
