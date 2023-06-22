@@ -23,7 +23,7 @@
  */
 
 import ConfigFile from 'spinal-lib-organ-monitoring';
-import { Process, spinalCore, FileSystem } from 'spinal-core-connectorjs_type';
+import { Process, spinalCore, FileSystem, Model } from 'spinal-core-connectorjs_type';
 import {
   SpinalGraphService,
   SpinalContext,
@@ -35,7 +35,7 @@ import * as ejs from 'ejs';
 import * as path from 'path';
 import * as fs from 'fs';
 import { performance } from 'perf_hooks';
-
+import  {debounce}  from 'lodash';
 
 require('dotenv').config();
 
@@ -88,51 +88,50 @@ class SpinalMain {
 
 
   private async handleAnalytic(analytic: SpinalNodeRef) {
-    const config = await spinalAnalyticService.getConfig(analytic.id.get());
-    const configParams = await spinalAnalyticService.getAttributesFromNode(config.id.get(),CATEGORY_ATTRIBUTE_ALGORTHM_PARAMETERS);
+  const config = await spinalAnalyticService.getConfig(analytic.id.get());
+  const configParams = await spinalAnalyticService.getAttributesFromNode(config.id.get(), CATEGORY_ATTRIBUTE_ALGORTHM_PARAMETERS);
+
+  // Create debouncedAnalysis function here to avoid code duplication
+  const debouncedAnalysis = debounce((id, entity) => {
+    const startTime = performance.now();
+    spinalAnalyticService.doAnalysis(id, entity).then(() => {
+      const endTime = performance.now();
+      const elapsedTime = endTime - startTime;
+      console.log(`Analysis completed in ${elapsedTime.toFixed(2)}ms`);
+      this.durations.push(elapsedTime);
+    });
+  }, 500); // 500ms delay
+
+  const entities = await spinalAnalyticService.getWorkingFollowedEntities(analytic.id.get());
+  
+  // Run the async operations inside the loop in parallel
+  await Promise.all(entities.map(async (entity) => {
     if (configParams['intervalTime'] === '0' || configParams['intervalTime'] === 0) {
-      const entities = await spinalAnalyticService.getWorkingFollowedEntities(
-        analytic.id.get()
-      );
-      for (const entity of entities) {
-        const entryDataModels =
-          await spinalAnalyticService.getEntryDataModelsFromFollowedEntity(
-            analytic.id.get(),
-            entity
-          );
-          for (const entryDataModel of entryDataModels) {
-            const valueModel = await entryDataModel.element.load();
-            console.log('ValueModel current value : ', valueModel.currentValue.get())
-            valueModel.currentValue.bind(() => {
-              const startTime = performance.now();
-              console.log('Value changed, starting analysis...');
-              spinalAnalyticService.doAnalysis(analytic.id.get(), entity).then(() => {
-                const endTime = performance.now();
-                const elapsedTime = endTime - startTime;
-                console.log(`Analysis completed in ${elapsedTime.toFixed(2)}ms`);
-                this.durations.push(elapsedTime);
-              
-              });
-                
-            }, false);
-        }
-      }
+      const entryDataModels = await spinalAnalyticService.getEntryDataModelsFromFollowedEntity(analytic.id.get(), entity,true,false);
+      await Promise.all(entryDataModels.map(async (entryDataModel) => {
+        const valueModel = await entryDataModel.element.load();
+        let previousValue = valueModel.currentValue.get(); // store the previous value
+        if (configParams['triggerAtStart']) previousValue =null;  // if triggerAtStart is true, force the analysis to run at the start
+        console.log('ValueModel current value : ', valueModel.currentValue.get())
+        valueModel.currentValue.bind(() => {
+          if (valueModel.currentValue.get() === previousValue) {
+            console.log('Value not changed, skipping analysis...')
+            return;
+          }
+          console.log('Value changed, starting analysis...');
+          debouncedAnalysis(analytic.id.get(), entity);
+        }, false);
+      }));
     } else {
-      const entities = await spinalAnalyticService.getWorkingFollowedEntities(
-        analytic.id.get()
-      );
-      for (const entity of entities) {
-        setInterval( async () => {
-          const startTime = performance.now();
-          spinalAnalyticService.doAnalysis(analytic.id.get(), entity);
-          const endTime = performance.now();
-          const elapsedTime = endTime - startTime;
-          console.log(`Analysis completed in ${elapsedTime.toFixed(2)}ms`);
-          this.durations.push(elapsedTime);
-        }, configParams['intervalTime']);
+      if(configParams['triggerAtStart']){
+        debouncedAnalysis(analytic.id.get(), entity);
       }
+      setInterval(() => {
+        debouncedAnalysis(analytic.id.get(), entity);
+      }, configParams['intervalTime']);
     }
-  }
+  }));
+}
 
   public async initJob() {
     const contexts = spinalAnalyticService.getContexts();
@@ -146,7 +145,6 @@ class SpinalMain {
           continue;
         }
         console.log('Handling Analytic : ', analytic.name.get());
-        // si intervalTime = 0 => method COV
         this.handleAnalytic(analytic);
         this.handledAnalytics.push(analytic.id.get());
       }
@@ -177,10 +175,6 @@ class SpinalMain {
   public resetReportVariables(){
     this.durations=[];
   }
-
-
-
-
 }
 
 async function Main() {

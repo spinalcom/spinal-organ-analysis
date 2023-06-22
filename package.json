@@ -1,6 +1,6 @@
 {
   "name": "spinal-organ-analysis",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "Organ that handles analysis routines",
   "main": "index.js",
   "scripts": {
@@ -17,6 +17,7 @@
     "chart.js": "^4.2.1",
     "dotenv": "^15.0.0",
     "ejs": "^3.1.9",
+    "lodash": "^4.17.21",
     "spinal-core-connectorjs_type": "git+https://github.com/spinalcom/spinal-core-connectorjs_type.git",
     "spinal-env-viewer-graph-service": "git+https://github.com/spinalcom/Spinal-Graph-Service.git",
     "spinal-env-viewer-plugin-documentation-service": "git+https://github.com/spinalcom/spinal-env-viewer-plugin-documentation-service.git",
