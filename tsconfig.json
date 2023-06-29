@@ -9,7 +9,9 @@
     "moduleResolution": "node",
     "removeComments": true,
     "skipLibCheck": true,
-    "skipDefaultLibCheck": true
+    "skipDefaultLibCheck": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
   },
   "include": [
     "src/**/*.ts"
