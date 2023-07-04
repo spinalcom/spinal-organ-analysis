@@ -177,7 +177,7 @@ class SpinalMain {
                 } else {
                   previousValue = valueModel.currentValue.get();
                   console.log('Value changed, starting analysis...');
-                  debouncedAnalysis(analytic.id.get(), entity);
+                  this.handleAnalyticExecution(analytic.id.get(), entity);
                 }
               }, false);
             })
