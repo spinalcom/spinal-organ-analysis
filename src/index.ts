@@ -119,22 +119,26 @@ class SpinalMain {
     });
   }
 
-  private async handleAnalytic(analytic: SpinalNodeRef) {
-    const config = await spinalAnalyticService.getConfig(analytic.id.get());
-    const configParams = await spinalAnalyticService.getAttributesFromNode(
-      config.id.get(),
-      CATEGORY_ATTRIBUTE_ALGORTHM_PARAMETERS
-    );
-
-    // Create debouncedAnalysis function here to avoid code duplication
-    const debouncedAnalysis = debounce((id, entity) => {
-      const startTime = performance.now();
+  private async handleAnalyticExecution(id: string, entity : any){
+    const startTime = performance.now();
       spinalAnalyticService.doAnalysis(id, entity).then(() => {
         const endTime = performance.now();
         const elapsedTime = endTime - startTime;
         console.log(`Analysis completed in ${elapsedTime.toFixed(2)}ms`);
         this.durations.push(elapsedTime);
       });
+  }
+
+  private async handleAnalytic(analytic: SpinalNodeRef) {
+    const config = await spinalAnalyticService.getConfig(analytic.id.get());
+    const configParams = await spinalAnalyticService.getAttributesFromNode(
+      config.id.get(),
+      CATEGORY_ATTRIBUTE_ALGORTHM_PARAMETERS
+    );
+    
+    // Create debouncedAnalysis function here to avoid code duplication
+    const debouncedAnalysis = debounce((id, entity) => {
+      this.handleAnalyticExecution(id,entity)
     }, 500); // 500ms delay
 
     const entities = await spinalAnalyticService.getWorkingFollowedEntities(
@@ -180,10 +184,10 @@ class SpinalMain {
           );
         } else {
           if (configParams['triggerAtStart']) {
-            debouncedAnalysis(analytic.id.get(), entity);
+            this.handleAnalyticExecution(analytic.id.get(), entity);
           }
           setInterval(() => {
-            debouncedAnalysis(analytic.id.get(), entity);
+            this.handleAnalyticExecution(analytic.id.get(), entity);
           }, configParams['intervalTime']);
         }
       })
@@ -384,7 +388,7 @@ class SpinalMain {
 async function Main() {
   const spinalMain = new SpinalMain();
   await spinalMain.init();
-  
+
   spinalAnalyticService.initTwilioCredentials(
     process.env.TWILIO_SID,
     process.env.TWILIO_TOKEN,
@@ -397,9 +401,9 @@ async function Main() {
     await spinalMain.initJob();
   }, parseInt(process.env.UPDATE_ANALYTIC_QUEUE_TIMER));
 
-  setInterval(() => {
+  /*setInterval(() => {
     spinalMain.generateReport();
     spinalMain.resetReportVariables();
-  }, parseInt(process.env.REPORT_TIMER));
+  }, parseInt(process.env.REPORT_TIMER));*/
 }
 Main();
