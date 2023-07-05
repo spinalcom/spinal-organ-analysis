@@ -37,8 +37,9 @@ import {
 import {
   spinalAnalyticService,
   CATEGORY_ATTRIBUTE_ALGORTHM_PARAMETERS,
+  getValueModelFromEntry
 } from 'spinal-model-analysis';
-
+import { SpinalAttribute } from 'spinal-models-documentation';
 import * as ejs from 'ejs';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -161,21 +162,22 @@ class SpinalMain {
             );
           await Promise.all(
             entryDataModels.map(async (entryDataModel) => {
-              const valueModel = await entryDataModel.element.load();
-              let previousValue = valueModel.currentValue.get(); // store the previous value
+              const valueModel = await getValueModelFromEntry(entryDataModel);
+              console.log('ValueModel : ', valueModel.get());
+              let previousValue = valueModel.get(); // store the previous value
               if (configParams['triggerAtStart']) {
                 console.log('Trigger at start is true, forcing analysis...');
                 previousValue = null; // if triggerAtStart is true, force the analysis to run at the start
               }
               console.log(
                 'ValueModel current value : ',
-                valueModel.currentValue.get()
+                valueModel.get()
               );
-              valueModel.currentValue.bind(() => {
-                if (valueModel.currentValue.get() === previousValue) {
+              valueModel.bind(() => {
+                if (valueModel.get() === previousValue) {
                   console.log('Value not changed, skipping analysis...');
                 } else {
-                  previousValue = valueModel.currentValue.get();
+                  previousValue = valueModel.get();
                   console.log('Value changed, starting analysis...');
                   this.handleAnalyticExecution(analytic.id.get(), entity);
                 }
