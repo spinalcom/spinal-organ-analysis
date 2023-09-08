@@ -28,6 +28,7 @@ import {
   spinalCore,
   FileSystem,
   Model,
+  BindProcess
 } from 'spinal-core-connectorjs_type';
 import {
   SpinalGraphService,
@@ -37,7 +38,14 @@ import {
 import {
   spinalAnalyticService,
   CATEGORY_ATTRIBUTE_ALGORTHM_PARAMETERS,
-  getValueModelFromEntry
+  CATEGORY_ATTRIBUTE_ANALYTIC_PARAMETERS,
+  CATEGORY_ATTRIBUTE_TRIGGER_PARAMETERS,
+  ANALYTIC_STATUS,
+  ATTRIBUTE_ANALYTIC_STATUS,
+  getValueModelFromEntry,
+  ATTRIBUTE_VALUE_SEPARATOR,
+  TRIGGER_TYPE,
+  ATTRIBUTE_TRIGGER_AT_START
 } from 'spinal-model-analysis';
 import { SpinalAttribute } from 'spinal-models-documentation';
 import * as ejs from 'ejs';
@@ -54,15 +62,32 @@ require('dotenv').config();
 
 const chat = google.chat('v1');
 
+
+type ModelBinding = {
+  model : Model;
+  bindProcess : Process
+};
+type TriggerProcesses = {
+  Intervals : NodeJS.Timer[];
+  Bindings : ModelBinding[];
+};
+
+type AnalyticProcesses = {
+  [analyticId: string]: TriggerProcesses;
+};
+
+
 class SpinalMain {
   constructor() {}
 
-  private handledAnalytics: string[];
+  private handledAnalytics : AnalyticProcesses;
+  //private handledAnalytics: string[];
   private durations: number[];
   jwtClient: JWT;
 
   public init() {
-    this.handledAnalytics = [];
+    //this.handledAnalytics = [];
+    this.handledAnalytics = {};
     this.durations = [];
 
     console.log('Init connection to Google Services...');
@@ -122,6 +147,7 @@ class SpinalMain {
 
   private async handleAnalyticExecution(id: string, entity : any){
     const startTime = performance.now();
+    console.log('Handling analytic execution...')
       spinalAnalyticService.doAnalysis(id, entity).then(() => {
         const endTime = performance.now();
         const elapsedTime = endTime - startTime;
@@ -132,68 +158,94 @@ class SpinalMain {
 
   private async handleAnalytic(analytic: SpinalNodeRef) {
     const config = await spinalAnalyticService.getConfig(analytic.id.get());
-    const configParams = await spinalAnalyticService.getAttributesFromNode(
+    const analyticConfig = await spinalAnalyticService.getAttributesFromNode(
       config.id.get(),
-      CATEGORY_ATTRIBUTE_ALGORTHM_PARAMETERS
+      CATEGORY_ATTRIBUTE_ANALYTIC_PARAMETERS
     );
-    
-    // Create debouncedAnalysis function here to avoid code duplication
-    const debouncedAnalysis = debounce((id, entity) => {
-      this.handleAnalyticExecution(id,entity)
-    }, 500); // 500ms delay
+    const isForceTrigger = analyticConfig[ATTRIBUTE_TRIGGER_AT_START] === 'true' ? true : false;
+    const triggerParams = await spinalAnalyticService.getAttributesFromNode(
+      config.id.get(),
+      CATEGORY_ATTRIBUTE_TRIGGER_PARAMETERS
+    );
 
     const entities = await spinalAnalyticService.getWorkingFollowedEntities(
       analytic.id.get()
     );
 
-    // Run the async operations inside the loop in parallel
-    await Promise.all(
-      entities.map(async (entity) => {
-        if (
-          configParams['intervalTime'] === '0' ||
-          configParams['intervalTime'] === 0
-        ) {
-          const entryDataModels =
-            await spinalAnalyticService.getEntryDataModelsFromFollowedEntity(
-              analytic.id.get(),
-              entity,
-              true,
-              false
-            );
-          await Promise.all(
-            entryDataModels.map(async (entryDataModel) => {
-              const valueModel = await getValueModelFromEntry(entryDataModel);
-              console.log('ValueModel : ', valueModel.get());
-              let previousValue = valueModel.get(); // store the previous value
-              if (configParams['triggerAtStart']) {
-                console.log('Trigger at start is true, forcing analysis...');
-                previousValue = null; // if triggerAtStart is true, force the analysis to run at the start
-              }
-              console.log(
-                'ValueModel current value : ',
-                valueModel.get()
-              );
-              valueModel.bind(() => {
-                if (valueModel.get() === previousValue) {
-                  console.log('Value not changed, skipping analysis...');
-                } else {
-                  previousValue = valueModel.get();
-                  console.log('Value changed, starting analysis...');
-                  this.handleAnalyticExecution(analytic.id.get(), entity);
-                }
-              }, false);
-            })
-          );
-        } else {
-          if (configParams['triggerAtStart']) {
-            this.handleAnalyticExecution(analytic.id.get(), entity);
+    for ( const trigger of Object.keys(triggerParams)){
+      const paramList = triggerParams[trigger].split(ATTRIBUTE_VALUE_SEPARATOR);
+      switch (paramList[0]){
+        case TRIGGER_TYPE.INTERVAL_TIME : {
+
+          console.log("interval time : ", paramList[1]);
+          for(const entity of entities){
+            if (isForceTrigger) {
+              this.handleAnalyticExecution(analytic.id.get(), entity);
+            }
+            const interval = setInterval(() => {
+              this.handleAnalyticExecution(analytic.id.get(), entity);
+            }, paramList[1]);
+            this.handledAnalytics[analytic.id.get()].Intervals.push(interval);
           }
-          setInterval(() => {
-            this.handleAnalyticExecution(analytic.id.get(), entity);
-          }, configParams['intervalTime']);
+          break;
         }
-      })
-    );
+        case TRIGGER_TYPE.CHANGE_OF_VALUE : {
+          const targetIndex = paramList[1];
+          console.log("COV ON : ", targetIndex);
+          for(const entity of entities){
+            const entryDataModel = await spinalAnalyticService.getEntryDataModelByInputIndex(analytic.id.get(),entity, targetIndex);
+
+            const valueModel: Model = await getValueModelFromEntry(entryDataModel);
+            let previousValue = valueModel.get(); // store the previous value
+            if(isForceTrigger) previousValue = null; // if triggerAtStart is true, force the analysis to run at the start
+            const bindProcess = valueModel.bind(() => {
+              if (valueModel.get() === previousValue) {
+                console.log('Value not changed, skipping analysis...');
+              } else {
+                previousValue = valueModel.get();
+                console.log('Value changed, starting analysis...');
+                //this.handleAnalyticExecution(analytic.id.get(), entity);
+              }
+            }, false);
+            this.handledAnalytics[analytic.id.get()].Bindings.push({model : valueModel, bindProcess : bindProcess});
+
+          }
+          
+          
+          break;
+        }
+        case TRIGGER_TYPE.CHANGE_OF_VALUE_WITH_THRESHOLD : {
+          const targetIndex = paramList[1];
+          console.log("COVWT ON : ", targetIndex);
+          for(const entity of entities){
+            const entryDataModel = await spinalAnalyticService.getEntryDataModelByInputIndex(analytic.id.get(),entity, targetIndex);
+            if(!entryDataModel) continue;
+            const valueModel = await getValueModelFromEntry(entryDataModel);
+            console.log('ValueModel : ', valueModel.get());
+            let previousValue = valueModel.get(); // store the previous value
+            if(isForceTrigger) previousValue = Number.POSITIVE_INFINITY; // if triggerAtStart is true, force the analysis to run at the start
+            const bindProcess = valueModel.bind(() => {
+              if ( Math.abs(valueModel.get() - previousValue) <= paramList[2]) {
+                console.log('Value change lower than trigger threshold, skipping analysis...');
+              } else {
+                previousValue = valueModel.get();
+                console.log('Value changed, starting analysis...');
+                this.handleAnalyticExecution(analytic.id.get(), entity);
+              }
+            }, false);
+            this.handledAnalytics[analytic.id.get()].Bindings.push({model : valueModel, bindProcess : bindProcess});
+
+          }
+          break;
+        }
+
+      }
+
+    }
+    // Create debouncedAnalysis function here to avoid code duplication
+    /*const debouncedAnalysis = debounce((id, entity) => {
+      this.handleAnalyticExecution(id,entity)
+    }, 500); */// 500ms delay
   }
  
  public async initJob() {
@@ -203,14 +255,45 @@ class SpinalMain {
         context.id.get()
       );
       for (const analytic of analytics) {
-        if (this.handledAnalytics.includes(analytic.id.get())) {
+        const config = await spinalAnalyticService.getConfig(analytic.id.get());
+        const analyticConfig = await spinalAnalyticService.getAttributesFromNode(
+          config.id.get(),
+          CATEGORY_ATTRIBUTE_ANALYTIC_PARAMETERS
+        );
+
+        // Get the status of the analytic
+        const isActive = analyticConfig[ATTRIBUTE_ANALYTIC_STATUS] === ANALYTIC_STATUS.ACTIVE ? true : false;
+        if (!isActive && (analytic.id.get() in this.handledAnalytics)) {
+          console.log('Analytic has been desactivated. Unhandling ...');
+          // remove all intervals and bindings then delete the analytic from handledAnalytics
+          for(const interval of this.handledAnalytics[analytic.id.get()].Intervals){
+            clearInterval(interval);
+          }
+          for(const binding of this.handledAnalytics[analytic.id.get()].Bindings){
+            binding.model.unbind(binding.bindProcess);
+          }
+          delete this.handledAnalytics[analytic.id.get()];
+          continue;
+        }
+        // Check if the analytic is already handled
+
+        if(!isActive && !(analytic.id.get() in this.handledAnalytics)){
+          continue;
+        }
+
+        if (isActive && ( analytic.id.get() in this.handledAnalytics )) {
+          console.log('Analytic already handled, skipping...');
           // Analytic already handled so skip
           continue;
         }
+
+        //Handle the analytic
         console.log('Handling Analytic : ', analytic.name.get());
+        this.handledAnalytics[analytic.id.get()] = { Intervals: [], Bindings: []};
         this.handleAnalytic(analytic);
-        this.handledAnalytics.push(analytic.id.get());
       }
+      
+
     }
   }
 
