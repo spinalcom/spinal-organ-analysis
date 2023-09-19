@@ -2,6 +2,13 @@
 
 The Spinal Organ Analysis is a module designed to gather and process analytics from the spinal database. It initiates bindings and computations utilizing the service provided by [Spinal Model Analysis](https://github.com/spinalcom/spinal-model-analysis).
 
+## Architecture
+
+To get a deeper understanding of how the Spinal Organ Analysis works, refer to the following schematics:
+
+- **Analytic Organ Workflow**: [View Schematic](docs/Analytic%20organ%20workflow.pdf)
+- **Analytic Exec**: [View Schematic](docs/Analytic%20exec.pdf)
+
 ## Getting Started
 
 These instructions will guide you on how to install and make use of the Spinal Organ Analysis.
@@ -56,5 +63,7 @@ Or using [pm2](https://pm2.keymetrics.io/docs/usage/quick-start/)
 ```bash
 pm2 start node dist/index.js
 ```
+
+
 
 
