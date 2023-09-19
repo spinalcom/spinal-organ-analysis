@@ -5,7 +5,9 @@ The Spinal Organ Analysis is a module designed to gather and process analytics f
 ## Architecture
 
 To get a deeper understanding of how the Spinal Organ Analysis works, refer to the following schematics:
-
+- **Analytic Global Architecture**: [View Schematic](docs/Analytic_global_architecture.pdf)
+- **Analytic Input documentation**: [View Schematic](docs/Analytic_input_architecture.pdf)
+- **Analytic Config Documentation**: [View Schematic](docs/Analytic_config_architecture.pdf)
 - **Analytic Organ Workflow**: [View Schematic](docs/Analytic_organ_workflow.pdf)
 - **Analytic Execution**: [View Schematic](docs/Analytic_exec.pdf)
 
