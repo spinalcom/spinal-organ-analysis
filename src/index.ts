@@ -478,7 +478,7 @@ async function Main() {
     process.env.TWILIO_SID,
     process.env.TWILIO_TOKEN,
     process.env.TWILIO_NUMBER
-  );
+  );  
   
   await spinalMain.initJob();
 
