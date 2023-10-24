@@ -204,7 +204,7 @@ class SpinalMain {
               } else {
                 previousValue = valueModel.get();
                 console.log('Value changed, starting analysis...');
-                //this.handleAnalyticExecution(analytic.id.get(), entity);
+                this.handleAnalyticExecution(analytic.id.get(), entity);
               }
             }, false);
             this.handledAnalytics[analytic.id.get()].Bindings.push({model : valueModel, bindProcess : bindProcess});
