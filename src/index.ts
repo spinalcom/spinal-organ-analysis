@@ -162,7 +162,7 @@ class SpinalMain {
       config.id.get(),
       CATEGORY_ATTRIBUTE_ANALYTIC_PARAMETERS
     );
-    const isForceTrigger = analyticConfig[ATTRIBUTE_TRIGGER_AT_START] === 'true' ? true : false;
+    const isForceTrigger = analyticConfig[ATTRIBUTE_TRIGGER_AT_START];
     const triggerParams = await spinalAnalyticService.getAttributesFromNode(
       config.id.get(),
       CATEGORY_ATTRIBUTE_TRIGGER_PARAMETERS
@@ -197,7 +197,7 @@ class SpinalMain {
 
             const valueModel: Model = await getValueModelFromEntry(entryDataModel);
             let previousValue = valueModel.get(); // store the previous value
-            if(isForceTrigger) previousValue = null; // if triggerAtStart is true, force the analysis to run at the start
+            if(isForceTrigger) this.handleAnalyticExecution(analytic.id.get(), entity); // if triggerAtStart is true, force the analysis to run at the start
             const bindProcess = valueModel.bind(() => {
               if (valueModel.get() === previousValue) {
                 console.log('Value not changed, skipping analysis...');
