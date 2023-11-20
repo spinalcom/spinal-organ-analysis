@@ -47,18 +47,18 @@ import {
   TRIGGER_TYPE,
   ATTRIBUTE_TRIGGER_AT_START
 } from 'spinal-model-analysis';
-import { SpinalAttribute } from 'spinal-models-documentation';
 import * as ejs from 'ejs';
 import * as path from 'path';
-import * as fs from 'fs';
-import puppeteer from 'puppeteer';
 import os from 'os';
+import { CronJob } from 'cron';
 import { performance } from 'perf_hooks';
 import { debounce } from 'lodash';
 import { google } from 'googleapis';
 import { JWT } from 'google-auth-library';
 import moment from 'moment';
+import { setInterval } from 'timers';
 require('dotenv').config();
+
 
 const chat = google.chat('v1');
 
@@ -70,6 +70,7 @@ type ModelBinding = {
 type TriggerProcesses = {
   Intervals : NodeJS.Timer[];
   Bindings : ModelBinding[];
+  CronJobs : CronJob[];
 };
 
 type AnalyticProcesses = {
@@ -147,7 +148,8 @@ class SpinalMain {
 
   private async handleAnalyticExecution(id: string, entity : any){
     const startTime = performance.now();
-    console.log('Handling analytic execution...')
+    const date = moment().format('MMMM Do YYYY, h:mm:ss a');
+    console.log(`Executing analytic at ${date} ...`)
       spinalAnalyticService.doAnalysis(id, entity).then(() => {
         const endTime = performance.now();
         const elapsedTime = endTime - startTime;
@@ -238,14 +240,27 @@ class SpinalMain {
           }
           break;
         }
-
+        case TRIGGER_TYPE.CRON : {
+          console.log("CRON ON : ", paramList[1]);
+          for(const entity of entities){
+            if (isForceTrigger) {
+              this.handleAnalyticExecution(analytic.id.get(), entity);
+            }
+            const cronJob = new CronJob(paramList[1], () => {
+              this.handleAnalyticExecution(analytic.id.get(), entity);
+            });
+            cronJob.start();
+            this.handledAnalytics[analytic.id.get()].CronJobs.push(cronJob);
+          }
+          break;
+        }
+        default : {
+          console.log("Unknown trigger type : ", paramList[0]);
+          break;
+        }
       }
 
     }
-    // Create debouncedAnalysis function here to avoid code duplication
-    /*const debouncedAnalysis = debounce((id, entity) => {
-      this.handleAnalyticExecution(id,entity)
-    }, 500); */// 500ms delay
   }
  
  public async initJob() {
@@ -262,7 +277,7 @@ class SpinalMain {
         );
 
         // Get the status of the analytic
-        const isActive = analyticConfig[ATTRIBUTE_ANALYTIC_STATUS] === ANALYTIC_STATUS.ACTIVE ? true : false;
+        const isActive = analyticConfig[ATTRIBUTE_ANALYTIC_STATUS] === ANALYTIC_STATUS.ACTIVE;
         if (!isActive && (analytic.id.get() in this.handledAnalytics)) {
           console.log('Analytic has been desactivated. Unhandling ...');
           // remove all intervals and bindings then delete the analytic from handledAnalytics
@@ -272,11 +287,14 @@ class SpinalMain {
           for(const binding of this.handledAnalytics[analytic.id.get()].Bindings){
             binding.model.unbind(binding.bindProcess);
           }
+          for(const cronJob of this.handledAnalytics[analytic.id.get()].CronJobs){
+            cronJob.stop();
+          }
           delete this.handledAnalytics[analytic.id.get()];
           continue;
         }
         // Check if the analytic is already handled
-
+ 
         if(!isActive && !(analytic.id.get() in this.handledAnalytics)){
           continue;
         }
@@ -289,7 +307,7 @@ class SpinalMain {
 
         //Handle the analytic
         console.log('Handling Analytic : ', analytic.name.get());
-        this.handledAnalytics[analytic.id.get()] = { Intervals: [], Bindings: []};
+        this.handledAnalytics[analytic.id.get()] = { Intervals: [], Bindings: [], CronJobs: []};
         this.handleAnalytic(analytic);
       }
       
@@ -327,18 +345,6 @@ class SpinalMain {
         averageDuration: this.getAverageDuration(),
         durations: this.durations,
       },
-      async (err, html) => {
-        if (err) {
-          console.error('Error rendering report:', err);
-        } else {
-          const browser = await puppeteer.launch();
-          const page = await browser.newPage();
-          await page.setContent(html);
-          await page.pdf({ path: 'report.pdf', format: 'A4' });
-          await browser.close();
-          console.log('Report generated successfully!');
-        }
-      }
     );
 
     try {
@@ -468,6 +474,8 @@ class SpinalMain {
   public resetReportVariables() {
     this.durations = [];
   }
+
+
 }
 
 async function Main() {
@@ -482,9 +490,27 @@ async function Main() {
   
   await spinalMain.initJob();
 
+
   setInterval(async () => {
     await spinalMain.initJob();
   }, parseInt(process.env.UPDATE_ANALYTIC_QUEUE_TIMER));
+
+  // let next = Date.now() + parseInt(process.env.UPDATE_ANALYTIC_QUEUE_TIMER);
+
+  // while (true) {
+  //   if(Date.now() >= next) await spinalMain.initJob();
+  //   else await wait();
+  //   next = Date.now() + parseInt(process.env.UPDATE_ANALYTIC_QUEUE_TIMER);
+  // }
+
+
+  // function wait() {
+  //   return new Promise((resolve, reject) => {
+  //     setTimeout(() => {
+  //       resolve(true)
+  //     }, 500);
+  //   });
+  // }
 
   /*setInterval(() => {
     spinalMain.generateReport();
