@@ -108,9 +108,9 @@ class SpinalMain {
     const conn = spinalCore.connect(url);
     ConfigFile.init(
       conn,
-      process.env.ORGAN_NAME + '-config',
+      process.env.ORGAN_NAME,
+      process.env.ORGAN_TYPE,
       process.env.SPINALHUB_IP,
-      process.env.SPINALHUB_PROTOCOL,
       parseInt(process.env.SPINALHUB_PORT)
     );
     return new Promise((resolve, reject) => {
