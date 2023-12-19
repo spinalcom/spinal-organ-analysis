@@ -1,6 +1,6 @@
 {
   "name": "spinal-organ-analysis",
-  "version": "2.7.0",
+  "version": "2.7.3",
   "description": "Organ that handles analysis routines",
   "main": "index.js",
   "scripts": {
