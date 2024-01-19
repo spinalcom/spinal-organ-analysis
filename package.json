@@ -1,20 +1,21 @@
 {
   "name": "spinal-organ-analysis",
-  "version": "2.7.3",
+  "version": "3.0.2",
   "description": "Organ that handles analysis routines",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "rm -rf dist declarations && tsc",
-    "build:dev": "rm -rf node_modules/spinal-model-analysis && cp -r ../../bos_covivio_01092022/spinal-viewer_covivio_10100/analysis/spinal-model-analysis ./node_modules && npm run build",
+    "build:dev": "npm run pre-build && npm run build",
     "start": "npm run build && node dist/index.js",
-    "start:dev": "npm run build:dev && node dist/index.js"
+    "start:dev": "npm run build:dev && node dist/index.js",
+    "pre-build": "rm -rf node_modules/spinal-model-analysis && cp -r ../../bos_covivio_01092022/spinal-viewer_covivio_10100/analysis/spinal-model-analysis ./node_modules"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "chart.js": "^4.2.1",
+    "chart.js": "^4.4.1",
     "cron": "^3.1.6",
     "dotenv": "^15.0.0",
     "ejs": "^3.1.9",
@@ -29,6 +30,7 @@
     "spinal-model-analysis": "git+https://github.com/spinalcom/spinal-model-analysis.git",
     "spinal-model-bmsnetwork": "git+https://github.com/spinalcom/spinal-model-bmsnetwork.git",
     "spinal-model-graph": "git+https://github.com/spinalcom/spinal-model-graph.git",
+    "spinal-service-gchat-messenger": "git+https://github.com/spinalcom/spinal-service-gchat-messenger.git",
     "spinal-service-ticket": "git+https://github.com/spinalcom/spinal-service-ticket.git"
   },
   "devDependencies": {

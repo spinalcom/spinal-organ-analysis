@@ -11,7 +11,7 @@
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
     "resolveJsonModule": true,
-    "esModuleInterop": true,
+    "esModuleInterop": true
   },
   "include": [
     "src/**/*.ts"

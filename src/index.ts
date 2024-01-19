@@ -37,6 +37,7 @@ import {
 } from 'spinal-env-viewer-graph-service';
 import {
   spinalAnalyticService,
+  ANALYTIC_RESULT_TYPE,
   CATEGORY_ATTRIBUTE_ALGORTHM_PARAMETERS,
   CATEGORY_ATTRIBUTE_ANALYTIC_PARAMETERS,
   CATEGORY_ATTRIBUTE_TRIGGER_PARAMETERS,
@@ -46,19 +47,18 @@ import {
   ATTRIBUTE_VALUE_SEPARATOR,
   TRIGGER_TYPE,
   ATTRIBUTE_TRIGGER_AT_START,
+  isResultSuccess,
+  isGChatMessageResult,
+  isGChatOrganCardResult
 } from 'spinal-model-analysis';
-import * as ejs from 'ejs';
-import * as path from 'path';
-import os from 'os';
+import { GoogleChatService} from 'spinal-service-gchat-messenger';
 import { CronJob } from 'cron';
 import { performance } from 'perf_hooks';
-import { google } from 'googleapis';
-import { JWT } from 'google-auth-library';
 import moment from 'moment';
 import { setInterval } from 'timers';
 require('dotenv').config();
 
-const chat = google.chat('v1');
+
 
 type ModelBinding = {
   entity: SpinalNodeRef;
@@ -67,7 +67,7 @@ type ModelBinding = {
 };
 
 type TriggerProcesses = {
-  Intervals: NodeJS.Timer[];
+  Intervals: NodeJS.Timeout[];
   Bindings: ModelBinding[];
   CronJobs: CronJob[];
 };
@@ -76,26 +76,18 @@ type AnalyticProcesses = {
 };
 
 class SpinalMain {
+
   constructor() {}
   private handledAnalytics: AnalyticProcesses;
   private durations: number[];
-  jwtClient: JWT;
+  private googleChatService: GoogleChatService;
 
   public init() {
     this.handledAnalytics = {};
     this.durations = [];
 
     console.log('Init connection to Google Services...');
-    this.jwtClient = new JWT({
-      email: process.env.GSERVICE_ACCOUNT_EMAIL,
-      key: process.env.GSERVICE_ACCOUNT_KEY,
-      scopes: [
-        'https://www.googleapis.com/auth/chat.bot',
-        'https://www.googleapis.com/auth/chat.messages',
-        'https://www.googleapis.com/auth/chat.messages.create',
-      ],
-    });
-    google.options({ auth: this.jwtClient });
+    this.googleChatService = new GoogleChatService(process.env.GSERVICE_ACCOUNT_EMAIL,process.env.GSERVICE_ACCOUNT_KEY);
     console.log('Done.');
     console.log('Init connection to HUB...');
     const url = `${process.env.SPINALHUB_PROTOCOL}://${process.env.USER_ID}:${process.env.USER_PASSWORD}@${process.env.SPINALHUB_IP}:${process.env.SPINALHUB_PORT}/`;
@@ -145,16 +137,29 @@ class SpinalMain {
     const date = moment().format('MMMM Do YYYY, h:mm:ss a');
     console.log(`Executing analytic at ${date} ...`);
     if (entity) {
-      spinalAnalyticService.doAnalysisOnEntity(id, entity).then(() => {
+      spinalAnalyticService.doAnalysisOnEntity(id, entity).then((result) => {
         const endTime = performance.now();
         const elapsedTime = endTime - startTime;
+          if(result && isResultSuccess(result) && ([ANALYTIC_RESULT_TYPE.GCHAT_MESSAGE, ANALYTIC_RESULT_TYPE.GCHAT_ORGAN_CARD].includes(result.resultType))) {
+            if(isGChatMessageResult(result)) this.googleChatService.sendTextMessage(result.spaceName, result.message)
+            if(isGChatOrganCardResult(result))  this.googleChatService.sendCardMessage(result.spaceName, result.card)
+          }
         console.log(`Analysis completed in ${elapsedTime.toFixed(2)}ms`);
         this.durations.push(elapsedTime);
       });
     } else {
-      spinalAnalyticService.doAnalysis(id).then(() => {
+      spinalAnalyticService.doAnalysis(id).then((results) => {
         const endTime = performance.now();
         const elapsedTime = endTime - startTime;
+        for(const result of results){
+          if(result && isResultSuccess(result) && ([ANALYTIC_RESULT_TYPE.GCHAT_MESSAGE, ANALYTIC_RESULT_TYPE.GCHAT_ORGAN_CARD].includes(result.resultType))) {
+            if(isGChatMessageResult(result)) {
+              console.log('Sending message to space : ', result.spaceName)
+              this.googleChatService.sendTextMessage(result.spaceName, result.message)
+            }
+            if(isGChatOrganCardResult(result))  this.googleChatService.sendCardMessage(result.spaceName, result.card)
+          }
+        }
         console.log(`Analysis completed in ${elapsedTime.toFixed(2)}ms`);
         this.durations.push(elapsedTime);
       });
@@ -332,152 +337,6 @@ class SpinalMain {
     );
   }
 
-  public generateReport() {
-    const formatMemoryUsage = (data) =>
-      `${Math.round((data / 1024 / 1024) * 100) / 100} MB`;
-    const memoryData = process.memoryUsage();
-    const memoryUsage = {
-      rss: `${formatMemoryUsage(memoryData.rss)}`,
-      heapTotal: `${formatMemoryUsage(memoryData.heapTotal)}`,
-      heapUsed: `${formatMemoryUsage(memoryData.heapUsed)}`,
-      external: `${formatMemoryUsage(memoryData.external)}`,
-    };
-    const totalMemory = os.totalmem();
-    const freeMemory = os.freemem();
-    const usedMemory = totalMemory - freeMemory;
-    const memoryUsagePercentage = Math.round((usedMemory / totalMemory) * 100);
-    const cpuUsagePercentage = Math.round(os.loadavg()[2]);
-
-    ejs.renderFile(path.join(__dirname, '../templates/report.ejs'), {
-      totalAnalyses: this.handledAnalytics.length,
-      averageDuration: this.getAverageDuration(),
-      durations: this.durations,
-    });
-
-    try {
-      const generatedDate = moment().format('MMMM Do YYYY, h:mm:ss a');
-      if (this.jwtClient) {
-        console.log('Sending report to Google Chat...');
-        chat.spaces.messages.create({
-          parent: `spaces/${process.env.GSPACE_NAME}`,
-          requestBody: {
-            cards: [
-              {
-                header: {
-                  title: 'Report',
-                  subtitle: `Generated from ${process.env.ORGAN_NAME} at ${generatedDate}`,
-                },
-                sections: [
-                  {
-                    header: 'Global Memory Information',
-                    widgets: [
-                      {
-                        keyValue: {
-                          topLabel: 'Total Memory',
-                          content: `${formatMemoryUsage(totalMemory)}`,
-                          bottomLabel: 'Total memory of the system',
-                        },
-                      },
-                      {
-                        keyValue: {
-                          topLabel: 'Free Memory',
-                          content: `${formatMemoryUsage(freeMemory)}`,
-                          bottomLabel: 'Free memory of the system',
-                        },
-                      },
-                      {
-                        keyValue: {
-                          topLabel: 'Used Memory',
-                          content: `${formatMemoryUsage(usedMemory)}`,
-                          bottomLabel: 'Used memory of the system',
-                        },
-                      },
-                      {
-                        keyValue: {
-                          topLabel: 'Memory Usage',
-                          content: `${memoryUsagePercentage}%`,
-                          bottomLabel: 'Percentage of memory used',
-                        },
-                      },
-                      {
-                        keyValue: {
-                          topLabel: 'Average CPU Usage (15 minutes)',
-                          content: `${cpuUsagePercentage}%`,
-                          bottomLabel:
-                            'Average percentage of CPU used the last 15 minutes',
-                        },
-                      },
-                    ],
-                  },
-                  {
-                    header: 'Organ Process Memory Information',
-                    widgets: [
-                      {
-                        keyValue: {
-                          topLabel: 'Resident Set Size',
-                          content: memoryUsage.rss,
-                          bottomLabel:
-                            'Total memory allocated for the process execution',
-                        },
-                      },
-                      {
-                        keyValue: {
-                          topLabel: 'Heap Total',
-                          content: memoryUsage.heapTotal,
-                          bottomLabel: 'Total size of the allocated heap',
-                        },
-                      },
-                      {
-                        keyValue: {
-                          topLabel: 'Heap Used',
-                          content: memoryUsage.heapUsed,
-                          bottomLabel:
-                            'Actual memory used during the execution',
-                        },
-                      },
-                      {
-                        keyValue: {
-                          topLabel: 'External',
-                          content: memoryUsage.external,
-                          bottomLabel: 'V8 external memory',
-                        },
-                      },
-                    ],
-                  },
-                  {
-                    header: 'Organ Specific Information ',
-                    widgets: [
-                      {
-                        keyValue: {
-                          topLabel: 'Total Analyses',
-                          content: `${this.handledAnalytics.length}`,
-                          bottomLabel:
-                            'Total number of analyses since last report',
-                        },
-                      },
-                      {
-                        keyValue: {
-                          topLabel: 'Average Duration',
-                          content: `${this.getAverageDuration().toFixed(2)}ms`,
-                          bottomLabel: 'Average duration of an analysis',
-                        },
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
-          },
-        });
-      } else {
-        console.log(
-          'No Google Chat credentials found, skipping report sending...'
-        );
-      }
-    } catch (e) {
-      console.error('Error sending chat report:', e);
-    }
-  }
 
   public resetReportVariables() {
     this.durations = [];
@@ -504,7 +363,6 @@ class SpinalMain {
 async function Main() {
   const spinalMain = new SpinalMain();
   await spinalMain.init();
-
   spinalAnalyticService.initTwilioCredentials(
     process.env.TWILIO_SID,
     process.env.TWILIO_TOKEN,
@@ -515,6 +373,7 @@ async function Main() {
 
   setInterval(async () => {
     await spinalMain.initJob();
+    spinalMain.resetReportVariables();
   }, parseInt(process.env.UPDATE_ANALYTIC_QUEUE_TIMER));
 
   // let next = Date.now() + parseInt(process.env.UPDATE_ANALYTIC_QUEUE_TIMER);
