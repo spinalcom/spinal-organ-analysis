@@ -207,6 +207,12 @@ class SpinalMain {
                 entity,
                 targetIndex
               );
+              if(!entryDataModel){
+                console.log(`Couldn't fetch entry data model from followed entity :" ${entity.name.get()} ,therefore skipping`)
+                continue
+              }
+              
+              
             const valueModel: Model = await getValueModelFromEntry(
               entryDataModel
             );
