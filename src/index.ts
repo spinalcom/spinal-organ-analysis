@@ -140,7 +140,7 @@ class SpinalMain {
       spinalAnalyticService.doAnalysisOnEntity(id, entity).then((result) => {
         const endTime = performance.now();
         const elapsedTime = endTime - startTime;
-          if(result && isResultSuccess(result) && ([ANALYTIC_RESULT_TYPE.GCHAT_MESSAGE, ANALYTIC_RESULT_TYPE.GCHAT_ORGAN_CARD].includes(result.resultType))) {
+          if(result && isResultSuccess(result) && ([ANALYTIC_RESULT_TYPE.GCHAT_MESSAGE, ANALYTIC_RESULT_TYPE.GCHAT_ORGAN_CARD].includes(result.resultType)) && result.resultValue === true) {
             if(isGChatMessageResult(result)) this.googleChatService.sendTextMessage(result.spaceName, result.message)
             if(isGChatOrganCardResult(result))  this.googleChatService.sendCardMessage(result.spaceName, result.card)
           }
@@ -152,7 +152,7 @@ class SpinalMain {
         const endTime = performance.now();
         const elapsedTime = endTime - startTime;
         for(const result of results){
-          if(result && isResultSuccess(result) && ([ANALYTIC_RESULT_TYPE.GCHAT_MESSAGE, ANALYTIC_RESULT_TYPE.GCHAT_ORGAN_CARD].includes(result.resultType))) {
+          if(result && isResultSuccess(result) && ([ANALYTIC_RESULT_TYPE.GCHAT_MESSAGE, ANALYTIC_RESULT_TYPE.GCHAT_ORGAN_CARD].includes(result.resultType)) && result.resultValue === true){
             if(isGChatMessageResult(result)) {
               console.log('Sending message to space : ', result.spaceName)
               this.googleChatService.sendTextMessage(result.spaceName, result.message)
