@@ -160,7 +160,7 @@ class SpinalMain {
   }
 
   private async handleAnalyticResult(result: IResult) {
-    if(!result.success) console.table(result);
+    if(!result.success) console.error(result.error);
     if (
       result &&
       isResultSuccess(result) &&
