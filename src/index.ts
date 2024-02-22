@@ -49,16 +49,16 @@ import {
   ATTRIBUTE_TRIGGER_AT_START,
   isResultSuccess,
   isGChatMessageResult,
-  isGChatOrganCardResult
+  isGChatOrganCardResult,
+  IResult,
 } from 'spinal-model-analysis';
-import { GoogleChatService} from 'spinal-service-gchat-messenger';
+import { GoogleChatService } from 'spinal-service-gchat-messenger';
 import { CronJob } from 'cron';
 import { performance } from 'perf_hooks';
 import moment from 'moment';
 import { setInterval } from 'timers';
+
 require('dotenv').config();
-
-
 
 type ModelBinding = {
   entity: SpinalNodeRef;
@@ -76,7 +76,6 @@ type AnalyticProcesses = {
 };
 
 class SpinalMain {
-
   constructor() {}
   private handledAnalytics: AnalyticProcesses;
   private durations: number[];
@@ -87,7 +86,10 @@ class SpinalMain {
     this.durations = [];
 
     console.log('Init connection to Google Services...');
-    this.googleChatService = new GoogleChatService(process.env.GSERVICE_ACCOUNT_EMAIL,process.env.GSERVICE_ACCOUNT_KEY);
+    this.googleChatService = new GoogleChatService(
+      process.env.GSERVICE_ACCOUNT_EMAIL,
+      process.env.GSERVICE_ACCOUNT_KEY
+    );
     console.log('Done.');
     console.log('Init connection to HUB...');
     const url = `${process.env.SPINALHUB_PROTOCOL}://${process.env.USER_ID}:${process.env.USER_PASSWORD}@${process.env.SPINALHUB_IP}:${process.env.SPINALHUB_PORT}/`;
@@ -140,10 +142,7 @@ class SpinalMain {
       spinalAnalyticService.doAnalysisOnEntity(id, entity).then((result) => {
         const endTime = performance.now();
         const elapsedTime = endTime - startTime;
-          if(result && isResultSuccess(result) && ([ANALYTIC_RESULT_TYPE.GCHAT_MESSAGE, ANALYTIC_RESULT_TYPE.GCHAT_ORGAN_CARD].includes(result.resultType)) && result.resultValue === true) {
-            if(isGChatMessageResult(result)) this.googleChatService.sendTextMessage(result.spaceName, result.message)
-            if(isGChatOrganCardResult(result))  this.googleChatService.sendCardMessage(result.spaceName, result.card)
-          }
+        this.handleAnalyticResult(result);
         console.log(`Analysis completed in ${elapsedTime.toFixed(2)}ms`);
         this.durations.push(elapsedTime);
       });
@@ -151,18 +150,33 @@ class SpinalMain {
       spinalAnalyticService.doAnalysis(id).then((results) => {
         const endTime = performance.now();
         const elapsedTime = endTime - startTime;
-        for(const result of results){
-          if(result && isResultSuccess(result) && ([ANALYTIC_RESULT_TYPE.GCHAT_MESSAGE, ANALYTIC_RESULT_TYPE.GCHAT_ORGAN_CARD].includes(result.resultType)) && result.resultValue === true){
-            if(isGChatMessageResult(result)) {
-              console.log('Sending message to space : ', result.spaceName)
-              this.googleChatService.sendTextMessage(result.spaceName, result.message)
-            }
-            if(isGChatOrganCardResult(result))  this.googleChatService.sendCardMessage(result.spaceName, result.card)
-          }
+        for (const result of results) {
+          this.handleAnalyticResult(result);
         }
         console.log(`Analysis completed in ${elapsedTime.toFixed(2)}ms`);
         this.durations.push(elapsedTime);
       });
+    }
+  }
+
+  private async handleAnalyticResult(result: IResult) {
+    if(!result.success) console.table(result);
+    if (
+      result &&
+      isResultSuccess(result) &&
+      [
+        ANALYTIC_RESULT_TYPE.GCHAT_MESSAGE,
+        ANALYTIC_RESULT_TYPE.GCHAT_ORGAN_CARD,
+      ].includes(result.resultType) &&
+      result.resultValue === true
+    ) {
+      if (isGChatMessageResult(result))
+        this.googleChatService.sendTextMessage(
+          result.spaceName,
+          result.message
+        );
+      if (isGChatOrganCardResult(result))
+        this.googleChatService.sendCardMessage(result.spaceName, result.card);
     }
   }
 
@@ -207,12 +221,13 @@ class SpinalMain {
                 entity,
                 targetIndex
               );
-              if(!entryDataModel){
-                console.log(`Couldn't fetch entry data model from followed entity :" ${entity.name.get()} ,therefore skipping`)
-                continue
-              }
-              
-              
+            if (!entryDataModel) {
+              console.log(
+                `Couldn't fetch entry data model from followed entity :" ${entity.name.get()} ,therefore skipping`
+              );
+              continue;
+            }
+
             const valueModel: Model = await getValueModelFromEntry(
               entryDataModel
             );
@@ -289,7 +304,7 @@ class SpinalMain {
       }
     }
   }
-  
+
   public async initJob() {
     const contexts = spinalAnalyticService.getContexts();
     for (const context of contexts) {
@@ -342,7 +357,6 @@ class SpinalMain {
       this.durations.length
     );
   }
-
 
   public resetReportVariables() {
     this.durations = [];
