@@ -51,6 +51,8 @@ import {
   isGChatMessageResult,
   isGChatOrganCardResult,
   IResult,
+  getCronMissingExecutionTimes,
+  getIntervalTimeMissingExecutionTimes
 } from 'spinal-model-analysis';
 import { GoogleChatService } from 'spinal-service-gchat-messenger';
 import { CronJob } from 'cron';
@@ -134,7 +136,7 @@ class SpinalMain {
     });
   }
 
-  private async handleAnalyticExecution(id: string, entity?: SpinalNodeRef) {
+  private async handleAnalyticExecution(id: string,triggerObject: {triggerType:string, triggerValue:string } , entity?: SpinalNodeRef) {
     const startTime = performance.now();
     const date = moment().format('MMMM Do YYYY, h:mm:ss a');
     console.log(`Executing analytic at ${date} ...`);
@@ -142,41 +144,43 @@ class SpinalMain {
       spinalAnalyticService.doAnalysisOnEntity(id, entity).then((result) => {
         const endTime = performance.now();
         const elapsedTime = endTime - startTime;
-        this.handleAnalyticResult(result);
+        this.handleAnalyticResult(id,result);
         console.log(`Analysis completed in ${elapsedTime.toFixed(2)}ms`);
         this.durations.push(elapsedTime);
       });
     } else {
-      spinalAnalyticService.doAnalysis(id).then((results) => {
+      spinalAnalyticService.doAnalysis(id,triggerObject).then((results) => {
         const endTime = performance.now();
         const elapsedTime = endTime - startTime;
         for (const result of results) {
-          this.handleAnalyticResult(result);
-        }
+          this.handleAnalyticResult(id,result);
+        };
         console.log(`Analysis completed in ${elapsedTime.toFixed(2)}ms`);
         this.durations.push(elapsedTime);
       });
     }
   }
 
-  private async handleAnalyticResult(result: IResult) {
+  private async handleAnalyticResult(analyticId:string, result: IResult) {
     if(!result.success) console.error(result.error);
-    if (
-      result &&
-      isResultSuccess(result) &&
-      [
-        ANALYTIC_RESULT_TYPE.GCHAT_MESSAGE,
-        ANALYTIC_RESULT_TYPE.GCHAT_ORGAN_CARD,
-      ].includes(result.resultType) &&
-      result.resultValue === true
-    ) {
-      if (isGChatMessageResult(result))
-        this.googleChatService.sendTextMessage(
-          result.spaceName,
-          result.message
-        );
-      if (isGChatOrganCardResult(result))
-        this.googleChatService.sendCardMessage(result.spaceName, result.card);
+    if(result && isResultSuccess(result)){
+      await spinalAnalyticService.updateLastExecutionTime(analyticId);
+      if (
+        [
+          ANALYTIC_RESULT_TYPE.GCHAT_MESSAGE,
+          ANALYTIC_RESULT_TYPE.GCHAT_ORGAN_CARD,
+        ].includes(result.resultType) &&
+        result.resultValue === true
+      ) {
+        if (isGChatMessageResult(result))
+          this.googleChatService.sendTextMessage(
+            result.spaceName,
+            result.message
+          );
+        if (isGChatOrganCardResult(result))
+          this.googleChatService.sendCardMessage(result.spaceName, result.card);
+      }
+
     }
   }
 
@@ -193,7 +197,7 @@ class SpinalMain {
     );
     if (isForceTrigger) {
       console.log('Force trigger at start');
-      this.handleAnalyticExecution(analytic.id.get());
+      this.handleAnalyticExecution(analytic.id.get(),{triggerType :'Forced', triggerValue: ''});
     }
 
     for (const trigger of Object.keys(triggerParams)) {
@@ -202,7 +206,7 @@ class SpinalMain {
         case TRIGGER_TYPE.INTERVAL_TIME: {
           console.log('Interval time : ', paramList[1]);
           const interval = setInterval(() => {
-            this.handleAnalyticExecution(analytic.id.get());
+            this.handleAnalyticExecution(analytic.id.get(), {triggerType :TRIGGER_TYPE.INTERVAL_TIME, triggerValue: paramList[1]});
           }, paramList[1]);
           this.handledAnalytics[analytic.id.get()].Intervals.push(interval);
           break;
@@ -238,7 +242,7 @@ class SpinalMain {
               } else {
                 previousValue = valueModel.get();
                 console.log('Value changed, starting analysis...');
-                this.handleAnalyticExecution(analytic.id.get(), entity);
+                this.handleAnalyticExecution(analytic.id.get(),{triggerType :TRIGGER_TYPE.CHANGE_OF_VALUE, triggerValue: targetIndex}, entity);
               }
             }, false);
             this.handledAnalytics[analytic.id.get()].Bindings.push({
@@ -276,7 +280,7 @@ class SpinalMain {
               } else {
                 previousValue = valueModel.get();
                 console.log('Value changed, starting analysis...');
-                this.handleAnalyticExecution(analytic.id.get(), entity);
+                this.handleAnalyticExecution(analytic.id.get(),{triggerType :TRIGGER_TYPE.CHANGE_OF_VALUE_WITH_THRESHOLD, triggerValue: targetIndex} ,entity);
               }
             }, false);
             this.handledAnalytics[analytic.id.get()].Bindings.push({
@@ -290,7 +294,7 @@ class SpinalMain {
         case TRIGGER_TYPE.CRON: {
           console.log('CRON ON : ', paramList[1]);
           const cronJob = new CronJob(paramList[1], () => {
-            this.handleAnalyticExecution(analytic.id.get());
+            this.handleAnalyticExecution(analytic.id.get(),{triggerType :TRIGGER_TYPE.CRON, triggerValue: paramList[1] });
           });
           cronJob.start();
           this.handledAnalytics[analytic.id.get()].CronJobs.push(cronJob);
@@ -334,7 +338,7 @@ class SpinalMain {
         }
 
         if (isActive && analytic.id.get() in this.handledAnalytics) {
-          console.log('Analytic already handled, skipping...');
+          //console.log('Analytic already handled, skipping...');
           // Analytic already handled so skip
           continue;
         }
