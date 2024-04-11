@@ -10,7 +10,7 @@
     "build:dev": "npm run cp:analysis && npm run cp:timeseries && npm run delete-rec-dep && npm run build",
     "cp:analysis": "rm -rf node_modules/spinal-model-analysis && cp -r ../../bos_covivio_01092022/spinal-viewer_covivio_10100/analysis/spinal-model-analysis ./node_modules",
     "cp:timeseries": "rm -rf node_modules/spinal-model-timeseries && cp -r ../../bos_covivio_01092022/spinal-viewer_covivio_10100/analysis/node_modules/spinal-model-timeseries ./node_modules",
-    "delete-rec-dep" : "find node_modules/ -path '*/node_modules/*' -type d -name 'spinal-*' -exec rm -r {} +",
+    "delete-rec-dep": "find node_modules/ -path '*/node_modules/*' -type d -name 'spinal-*' -exec rm -r {} +",
 
     "test": "echo \"Error: no test specified\" && exit 1"
   },

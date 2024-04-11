@@ -335,7 +335,7 @@ class SpinalMain {
         // Check if the analytic is already handled
         if (!isActive && !(analytic.id.get() in this.handledAnalytics)) {
           continue;
-        }
+        };
 
         if (isActive && analytic.id.get() in this.handledAnalytics) {
           //console.log('Analytic already handled, skipping...');
