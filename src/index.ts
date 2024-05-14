@@ -147,7 +147,7 @@ class SpinalMain {
         const endTime = performance.now();
         const elapsedTime = endTime - startTime;
         this.handleAnalyticResult(id,result);
-        console.log(`Analysis completed in ${elapsedTime.toFixed(2)}ms`);
+        console.log(`Analysis completed in ${elapsedTime.toFixed(2)}ms at ${date}`);
         this.durations.push(elapsedTime);
       });
     } else {
@@ -157,7 +157,7 @@ class SpinalMain {
         for (const result of results) {
           this.handleAnalyticResult(id,result);
         };
-        console.log(`Analysis completed in ${elapsedTime.toFixed(2)}ms`);
+        console.log(`Analysis completed in ${elapsedTime.toFixed(2)}ms at ${date}`);
         this.durations.push(elapsedTime);
       });
     }
