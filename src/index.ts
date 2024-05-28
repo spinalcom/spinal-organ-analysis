@@ -77,6 +77,11 @@ type AnalyticProcesses = {
   [analyticId: string]: TriggerProcesses;
 };
 
+//@ts-ignore
+FileSystem.onConnectionError = async (error_code: number) => {
+    process.exit(error_code);
+}
+
 class SpinalMain {
   constructor() {}
   private handledAnalytics: AnalyticProcesses;
@@ -96,7 +101,7 @@ class SpinalMain {
     console.log('Init connection to HUB...');
     const host = process.env.SPINALHUB_PORT ? `${process.env.SPINALHUB_IP}:${process.env.SPINALHUB_PORT}` : process.env.SPINALHUB_IP;
     const url = `${process.env.SPINALHUB_PROTOCOL}://${process.env.USER_ID}:${process.env.USER_PASSWORD}@${host}/`;
-    console.log('Connecting to', url)
+    console.log('Connecting to', url);
     const conn = spinalCore.connect(url);
     ConfigFile.init(
       conn,
