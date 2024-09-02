@@ -36,24 +36,16 @@ import {
   SpinalNodeRef,
 } from 'spinal-env-viewer-graph-service';
 import {
-  spinalAnalyticService,
-  ANALYTIC_RESULT_TYPE,
-  CATEGORY_ATTRIBUTE_ALGORTHM_PARAMETERS,
-  CATEGORY_ATTRIBUTE_ANALYTIC_PARAMETERS,
-  CATEGORY_ATTRIBUTE_TRIGGER_PARAMETERS,
-  ANALYTIC_STATUS,
-  ATTRIBUTE_ANALYTIC_STATUS,
-  getValueModelFromEntry,
-  ATTRIBUTE_VALUE_SEPARATOR,
-  TRIGGER_TYPE,
-  ATTRIBUTE_TRIGGER_AT_START,
+  spinalAnalyticExecutionService,
+  spinalAnalyticInputManagerService,
+  spinalAnalyticNodeManagerService,
+  CONSTANTS,
   isResultSuccess,
   isGChatMessageResult,
   isGChatOrganCardResult,
-  IResult,
-  getCronMissingExecutionTimes,
-  getIntervalTimeMissingExecutionTimes
+  IResult
 } from 'spinal-model-analysis';
+import { SpinalAttribute } from 'spinal-models-documentation';
 import { GoogleChatService } from 'spinal-service-gchat-messenger';
 import { CronJob } from 'cron';
 import { performance } from 'perf_hooks';
@@ -79,8 +71,8 @@ type AnalyticProcesses = {
 
 //@ts-ignore
 FileSystem.onConnectionError = async (error_code: number) => {
-    process.exit(error_code);
-}
+  process.exit(error_code);
+};
 
 class SpinalMain {
   constructor() {}
@@ -99,7 +91,9 @@ class SpinalMain {
     );
     console.log('Done.');
     console.log('Init connection to HUB...');
-    const host = process.env.SPINALHUB_PORT ? `${process.env.SPINALHUB_IP}:${process.env.SPINALHUB_PORT}` : process.env.SPINALHUB_IP;
+    const host = process.env.SPINALHUB_PORT
+      ? `${process.env.SPINALHUB_IP}:${process.env.SPINALHUB_PORT}`
+      : process.env.SPINALHUB_IP;
     const url = `${process.env.SPINALHUB_PROTOCOL}://${process.env.USER_ID}:${process.env.USER_PASSWORD}@${host}/`;
     console.log('Connecting to', url);
     const conn = spinalCore.connect(url);
@@ -143,39 +137,49 @@ class SpinalMain {
     });
   }
 
-  private async handleAnalyticExecution(id: string,triggerObject: {triggerType:string, triggerValue:string } , entity?: SpinalNodeRef) {
+  private async handleAnalyticExecution(
+    id: string,
+    triggerObject: { triggerType: string; triggerValue: string },
+    entity?: SpinalNodeRef
+  ) {
     const startTime = performance.now();
     const date = moment().format('MMMM Do YYYY, h:mm:ss a');
     console.log(`Executing analytic at ${date} ...`);
     if (entity) {
-      spinalAnalyticService.doAnalysisOnEntity(id, entity).then((result) => {
-        const endTime = performance.now();
-        const elapsedTime = endTime - startTime;
-        this.handleAnalyticResult(id,result);
-        console.log(`Analysis completed in ${elapsedTime.toFixed(2)}ms at ${date}`);
-        this.durations.push(elapsedTime);
-      });
-    } else {
-      spinalAnalyticService.doAnalysis(id,triggerObject).then((results) => {
+      spinalAnalyticExecutionService.doAnalysisOnEntity(id, entity).then((results) => {
         const endTime = performance.now();
         const elapsedTime = endTime - startTime;
         for (const result of results) {
-          this.handleAnalyticResult(id,result);
-        };
-        console.log(`Analysis completed in ${elapsedTime.toFixed(2)}ms at ${date}`);
+          this.handleAnalyticResult(id, result);
+        }
+        console.log(
+          `Analysis completed in ${elapsedTime.toFixed(2)}ms at ${date}`
+        );
+        this.durations.push(elapsedTime);
+      });
+    } else {
+      spinalAnalyticExecutionService.doAnalysis(id, triggerObject).then((results) => {
+        const endTime = performance.now();
+        const elapsedTime = endTime - startTime;
+        for (const result of results) {
+          this.handleAnalyticResult(id, result);
+        }
+        console.log(
+          `Analysis completed in ${elapsedTime.toFixed(2)}ms at ${date}`
+        );
         this.durations.push(elapsedTime);
       });
     }
   }
 
-  private async handleAnalyticResult(analyticId:string, result: IResult) {
-    if(!result.success) console.error(result.error);
-    if(result && isResultSuccess(result)){
-      await spinalAnalyticService.updateLastExecutionTime(analyticId);
+  private async handleAnalyticResult(analyticId: string, result: IResult) {
+    if (!result.success) console.error(result.error);
+    if (result && isResultSuccess(result)) {
+      await spinalAnalyticExecutionService.updateLastExecutionTime(analyticId);
       if (
         [
-          ANALYTIC_RESULT_TYPE.GCHAT_MESSAGE,
-          ANALYTIC_RESULT_TYPE.GCHAT_ORGAN_CARD,
+          CONSTANTS.ANALYTIC_RESULT_TYPE.GCHAT_MESSAGE,
+          CONSTANTS.ANALYTIC_RESULT_TYPE.GCHAT_ORGAN_CARD,
         ].includes(result.resultType) &&
         result.resultValue === true
       ) {
@@ -187,47 +191,54 @@ class SpinalMain {
         if (isGChatOrganCardResult(result))
           this.googleChatService.sendCardMessage(result.spaceName, result.card);
       }
-
     }
   }
 
   private async handleAnalytic(analytic: SpinalNodeRef) {
-    const config = await spinalAnalyticService.getConfig(analytic.id.get());
-    const analyticConfig = await spinalAnalyticService.getAttributesFromNode(
+    const config = await spinalAnalyticNodeManagerService.getConfig(analytic.id.get());
+    const analyticConfig = await spinalAnalyticNodeManagerService.getAttributesFromNode(
       config.id.get(),
-      CATEGORY_ATTRIBUTE_ANALYTIC_PARAMETERS
+      CONSTANTS.CATEGORY_ATTRIBUTE_ANALYTIC_PARAMETERS
     );
-    const isForceTrigger = analyticConfig[ATTRIBUTE_TRIGGER_AT_START];
-    const triggerParams = await spinalAnalyticService.getAttributesFromNode(
+    const isForceTrigger = analyticConfig[CONSTANTS.ATTRIBUTE_TRIGGER_AT_START];
+    const aggregateTrigger = analyticConfig[CONSTANTS.ATTRIBUTE_AGGREGATE_EXECUTION_TIME];
+
+    const triggerParams = await spinalAnalyticNodeManagerService.getAttributesFromNode(
       config.id.get(),
-      CATEGORY_ATTRIBUTE_TRIGGER_PARAMETERS
+      CONSTANTS.CATEGORY_ATTRIBUTE_TRIGGER_PARAMETERS
     );
     if (isForceTrigger) {
       console.log('Force trigger at start');
-      this.handleAnalyticExecution(analytic.id.get(),{triggerType :'Forced', triggerValue: ''});
+      this.handleAnalyticExecution(analytic.id.get(), {
+        triggerType: 'Forced',
+        triggerValue: '',
+      });
     }
 
     for (const trigger of Object.keys(triggerParams)) {
-      const paramList = triggerParams[trigger].split(ATTRIBUTE_VALUE_SEPARATOR);
+      const paramList = triggerParams[trigger].split(CONSTANTS.ATTRIBUTE_VALUE_SEPARATOR);
       switch (paramList[0]) {
-        case TRIGGER_TYPE.INTERVAL_TIME: {
+        case CONSTANTS.TRIGGER_TYPE.INTERVAL_TIME: {
           console.log('Interval time : ', paramList[1]);
           const interval = setInterval(() => {
-            this.handleAnalyticExecution(analytic.id.get(), {triggerType :TRIGGER_TYPE.INTERVAL_TIME, triggerValue: paramList[1]});
+            this.handleAnalyticExecution(analytic.id.get(), {
+              triggerType: CONSTANTS.TRIGGER_TYPE.INTERVAL_TIME,
+              triggerValue: paramList[1],
+            });
           }, paramList[1]);
           this.handledAnalytics[analytic.id.get()].Intervals.push(interval);
           break;
         }
-        case TRIGGER_TYPE.CHANGE_OF_VALUE: {
+        case CONSTANTS.TRIGGER_TYPE.CHANGE_OF_VALUE: {
           const entities =
-            await spinalAnalyticService.getWorkingFollowedEntities(
+            await spinalAnalyticInputManagerService.getWorkingFollowedEntities(
               analytic.id.get()
             );
-          const targetIndex = paramList[1];
+          const targetIndex: string = paramList[1];
           console.log('COV ON : ', targetIndex);
           for (const entity of entities) {
             const entryDataModel =
-              await spinalAnalyticService.getEntryDataModelByInputIndex(
+              await spinalAnalyticInputManagerService.getEntryDataModelByInputIndex(
                 analytic.id.get(),
                 entity,
                 targetIndex
@@ -238,70 +249,48 @@ class SpinalMain {
               );
               continue;
             }
-
-            const valueModel: Model = await getValueModelFromEntry(
-              entryDataModel
-            );
-            let previousValue = valueModel.get(); // store the previous value
-            const bindProcess = valueModel.bind(() => {
-              if (valueModel.get() === previousValue) {
-                console.log('Value not changed, skipping analysis...');
-              } else {
-                previousValue = valueModel.get();
-                console.log('Value changed, starting analysis...');
-                this.handleAnalyticExecution(analytic.id.get(),{triggerType :TRIGGER_TYPE.CHANGE_OF_VALUE, triggerValue: targetIndex}, entity);
+            if (Array.isArray(entryDataModel)) {
+              for (const entry of entryDataModel) {
+                this.createBinding(entry, analytic, entity, targetIndex);
               }
-            }, false);
-            this.handledAnalytics[analytic.id.get()].Bindings.push({
-              entity: entity,
-              model: valueModel,
-              bindProcess: bindProcess,
-            });
+            } else
+              this.createBinding(entryDataModel, analytic, entity, targetIndex);
           }
-
           break;
         }
-        case TRIGGER_TYPE.CHANGE_OF_VALUE_WITH_THRESHOLD: {
+        case CONSTANTS.TRIGGER_TYPE.CHANGE_OF_VALUE_WITH_THRESHOLD: {
           const entities =
-            await spinalAnalyticService.getWorkingFollowedEntities(
+            await spinalAnalyticInputManagerService.getWorkingFollowedEntities(
               analytic.id.get()
             );
           const targetIndex = paramList[1];
           console.log('COVWT ON : ', targetIndex);
           for (const entity of entities) {
             const entryDataModel =
-              await spinalAnalyticService.getEntryDataModelByInputIndex(
+              await spinalAnalyticInputManagerService.getEntryDataModelByInputIndex(
                 analytic.id.get(),
                 entity,
                 targetIndex
               );
             if (!entryDataModel) continue;
-            const valueModel = await getValueModelFromEntry(entryDataModel);
-            console.log('ValueModel : ', valueModel.get());
-            let previousValue = valueModel.get(); // store the previous value
-            const bindProcess = valueModel.bind(() => {
-              if (Math.abs(valueModel.get() - previousValue) <= paramList[2]) {
-                console.log(
-                  'Value change lower than trigger threshold, skipping analysis...'
-                );
-              } else {
-                previousValue = valueModel.get();
-                console.log('Value changed, starting analysis...');
-                this.handleAnalyticExecution(analytic.id.get(),{triggerType :TRIGGER_TYPE.CHANGE_OF_VALUE_WITH_THRESHOLD, triggerValue: targetIndex} ,entity);
+            if (Array.isArray(entryDataModel)) {
+              for (const entry of entryDataModel) {
+                this.createBinding(entry, analytic, entity, targetIndex,paramList[2]);
               }
-            }, false);
-            this.handledAnalytics[analytic.id.get()].Bindings.push({
-              entity: entity,
-              model: valueModel,
-              bindProcess: bindProcess,
-            });
+            } else
+              this.createBinding(entryDataModel, analytic, entity, targetIndex,paramList[2]);
           }
           break;
         }
-        case TRIGGER_TYPE.CRON: {
-          console.log('CRON ON : ', paramList[1]);
-          const cronJob = new CronJob(paramList[1], () => {
-            this.handleAnalyticExecution(analytic.id.get(),{triggerType :TRIGGER_TYPE.CRON, triggerValue: paramList[1] });
+
+        case CONSTANTS.TRIGGER_TYPE.CRON: {
+          const cronValue = aggregateTrigger || paramList[1];
+          console.log('CRON ON : ', cronValue);
+          const cronJob = new CronJob(cronValue, () => {
+            this.handleAnalyticExecution(analytic.id.get(), {
+              triggerType: CONSTANTS.TRIGGER_TYPE.CRON,
+              triggerValue: paramList[1],
+            });
           });
           cronJob.start();
           this.handledAnalytics[analytic.id.get()].CronJobs.push(cronJob);
@@ -316,23 +305,65 @@ class SpinalMain {
     }
   }
 
+  public async createBinding(
+    entryDataModel: SpinalNodeRef | SpinalAttribute,
+    analytic: SpinalNodeRef,
+    entity: SpinalNodeRef,
+    targetIndex: string,
+    tresholdValue?: number
+  ) {
+    {
+      const valueModel: Model = await spinalAnalyticInputManagerService.getValueModelFromEntry(entryDataModel);
+      let previousValue = valueModel.get(); // store the previous value
+      const bindProcess = valueModel.bind(() => {
+        if (
+          valueModel.get() === previousValue ||
+          (tresholdValue &&
+            Math.abs(valueModel.get() - previousValue) <= tresholdValue)
+        ) {
+          console.log(
+            'Value not changed or did not exceed treshold, skipping analysis...'
+          );
+        } else {
+          previousValue = valueModel.get();
+          console.log('Value changed, starting analysis...');
+          this.handleAnalyticExecution(
+            analytic.id.get(),
+            {
+              triggerType: tresholdValue
+                ? CONSTANTS.TRIGGER_TYPE.CHANGE_OF_VALUE_WITH_THRESHOLD
+                : CONSTANTS.TRIGGER_TYPE.CHANGE_OF_VALUE,
+              triggerValue: targetIndex,
+            },
+            entity
+          );
+        }
+      }, false);
+      this.handledAnalytics[analytic.id.get()].Bindings.push({
+        entity: entity,
+        model: valueModel,
+        bindProcess: bindProcess,
+      });
+    }
+  }
+
   public async initJob() {
-    const contexts = spinalAnalyticService.getContexts();
+    const contexts = spinalAnalyticNodeManagerService.getContexts();
     for (const context of contexts) {
-      const analytics = await spinalAnalyticService.getAllAnalytics(
+      const analytics = await spinalAnalyticNodeManagerService.getAllAnalytics(
         context.id.get()
       );
       for (const analytic of analytics) {
-        const config = await spinalAnalyticService.getConfig(analytic.id.get());
+        const config = await spinalAnalyticNodeManagerService.getConfig(analytic.id.get());
         const analyticConfig =
-          await spinalAnalyticService.getAttributesFromNode(
+          await spinalAnalyticNodeManagerService.getAttributesFromNode(
             config.id.get(),
-            CATEGORY_ATTRIBUTE_ANALYTIC_PARAMETERS
+            CONSTANTS.CATEGORY_ATTRIBUTE_ANALYTIC_PARAMETERS
           );
 
         // Get the status of the analytic
         const isActive =
-          analyticConfig[ATTRIBUTE_ANALYTIC_STATUS] === ANALYTIC_STATUS.ACTIVE;
+          analyticConfig[CONSTANTS.ATTRIBUTE_ANALYTIC_STATUS] === CONSTANTS.ANALYTIC_STATUS.ACTIVE;
         if (!isActive && analytic.id.get() in this.handledAnalytics) {
           console.log('Analytic has been desactivated. Unhandling ...');
           // remove all intervals and bindings then delete the analytic from handledAnalytics
@@ -342,7 +373,7 @@ class SpinalMain {
         // Check if the analytic is already handled
         if (!isActive && !(analytic.id.get() in this.handledAnalytics)) {
           continue;
-        };
+        }
 
         if (isActive && analytic.id.get() in this.handledAnalytics) {
           //console.log('Analytic already handled, skipping...');
@@ -391,13 +422,17 @@ class SpinalMain {
   }
 }
 
+
+
 async function Main() {
   const spinalMain = new SpinalMain();
   await spinalMain.init();
-  spinalAnalyticService.initTwilioCredentials(
-    process.env.TWILIO_SID,
-    process.env.TWILIO_TOKEN,
-    process.env.TWILIO_NUMBER
+
+  spinalAnalyticExecutionService.initTwilioManagerService({
+    accountSid: process.env.TWILIO_SID,
+    authToken :process.env.TWILIO_TOKEN,
+    fromNumber : process.env.TWILIO_NUMBER
+  }
   );
 
   await spinalMain.initJob();

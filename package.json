@@ -1,6 +1,6 @@
 {
   "name": "spinal-organ-analysis",
-  "version": "3.1.1",
+  "version": "3.2.0",
   "description": "Organ that handles analysis routines",
   "main": "index.js",
   "scripts": {
@@ -8,7 +8,7 @@
     "start:dev": "npm run build:dev && node dist/index.js",
     "build": "rm -rf dist declarations && tsc",
     "build:dev": "npm run cp:analysis && npm run build",
-    "cp:analysis": "rm -rf node_modules/spinal-model-analysis && cp -r ../../bos_covivio_01092022/spinal-viewer_covivio_10100/analysis/spinal-model-analysis ./node_modules",
+    "cp:analysis": "rm -rf node_modules/spinal-model-analysis && cp -r ../spinal-model-analysis ./node_modules",
     "cp:timeseries": "rm -rf node_modules/spinal-model-timeseries && cp -r ../../bos_covivio_01092022/spinal-viewer_covivio_10100/analysis/node_modules/spinal-model-timeseries ./node_modules",
     "delete-rec-dep": "find node_modules/ -path '*/node_modules/*' -type d -name 'spinal-*' -exec rm -r {} +",
     "test": "echo \"Error: no test specified\" && exit 1"
