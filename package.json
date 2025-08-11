@@ -25,20 +25,23 @@
     "googleapis": "^118.0.0",
     "lodash": "^4.17.21",
     "moment": "^2.29.4",
-    "path": "^0.12.7",
-    "spinal-core-connectorjs_type": "git+https://github.com/spinalcom/spinal-core-connectorjs_type.git",
-    "spinal-env-viewer-graph-service": "git+https://github.com/spinalcom/Spinal-Graph-Service.git",
-    "spinal-env-viewer-plugin-documentation-service": "git+https://github.com/spinalcom/spinal-env-viewer-plugin-documentation-service.git",
-    "spinal-lib-organ-monitoring": "git+https://github.com/spinalcom/spinal-lib-organ-monitoring.git",
-    "spinal-model-analysis": "git+https://github.com/spinalcom/spinal-model-analysis.git",
-    "spinal-model-bmsnetwork": "git+https://github.com/spinalcom/spinal-model-bmsnetwork.git",
-    "spinal-model-graph": "git+https://github.com/spinalcom/spinal-model-graph.git",
-    "spinal-service-gchat-messenger": "git+https://github.com/spinalcom/spinal-service-gchat-messenger.git",
-    "spinal-service-ticket": "git+https://github.com/spinalcom/spinal-service-ticket.git"
+    "path": "^0.12.7"
   },
   "devDependencies": {
     "@types/ejs": "^3.1.2",
     "@types/node": "^18.11.18",
     "typescript": "^4.9.5"
+  },
+  "spinalDependencies": {
+    "spinal-core-connectorjs": "spinal-core-connectorjs",
+    "spinal-core-connectorjs_type": "spinal-core-connectorjs_type",
+    "spinal-env-viewer-graph-service": "Spinal-Graph-Service",
+    "spinal-env-viewer-plugin-documentation-service": "spinal-env-viewer-plugin-documentation-service",
+    "spinal-lib-organ-monitoring": "spinal-lib-organ-monitoring",
+    "spinal-model-analysis": "spinal-model-analysis",
+    "spinal-model-bmsnetwork": "spinal-model-bmsnetwork",
+    "spinal-model-graph": "spinal-model-graph",
+    "spinal-service-gchat-messenger": "spinal-service-gchat-messenger",
+    "spinal-service-ticket": "spinal-service-ticket"
   }
 }
