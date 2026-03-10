@@ -29,28 +29,28 @@ import {
   FileSystem,
   Model,
   BindProcess,
-} from 'spinal-core-connectorjs_type';
+} from 'spinal-core-connectorjs';
 import {
   SpinalGraphService,
   SpinalContext,
   SpinalNodeRef,
 } from 'spinal-env-viewer-graph-service';
-import {
-  spinalAnalyticExecutionService,
-  spinalAnalyticInputManagerService,
-  spinalAnalyticNodeManagerService,
-  CONSTANTS,
-  isResultSuccess,
-  isGChatMessageResult,
-  isGChatOrganCardResult,
-  IResult
-} from 'spinal-model-analysis';
+
+import type { SpinalNode } from 'spinal-model-graph';
+
 import { SpinalAttribute } from 'spinal-models-documentation';
 import { GoogleChatService } from 'spinal-service-gchat-messenger';
 import { CronJob } from 'cron';
 import { performance } from 'perf_hooks';
 import moment from 'moment';
 import { setInterval } from 'timers';
+
+import {
+  spinalAnalysisFactoryService,
+  spinalAnalysisExecutionService,
+  spinalAnalyticNodeManagerService,
+  IAnalysisConfigJSON,
+} from 'spinal-model-analysis';
 
 require('dotenv').config();
 
@@ -74,21 +74,79 @@ FileSystem.onConnectionError = async (error_code: number) => {
   process.exit(error_code);
 };
 
+const config1: IAnalysisConfigJSON = {
+  contextName: 'MyAnalysisContext',
+  analysisName: 'Temperature Sum',
+  description: 'Sums temperatures from child sensors',
+  anchorNodeId: "SpinalNode-91105bdb-c183-9010-ee00-78fac4a8d2b2-1879f44b78f",  // must be loaded in graph
+
+  // Step 2: Get children of anchor target as work nodes
+  worknodeResolver: {
+    blocks: [
+      { ref: 'node', algorithmName: 'CURRENT_NODE' },
+      { ref: 'kids', algorithmName: 'GET_NODE_CHILDREN', inputs: ['node'], parameters: { regex: 'groupHasgeographicRoom' } },
+    ],
+  },
+
+  // Step 3a: For each work node, gather data into registers
+  inputWorkflow: {
+    blocks: [
+      { ref: 'node', algorithmName: 'CURRENT_NODE' },
+      { ref: 'sid', algorithmName: 'GET_NODE_SERVER_ID', inputs: ['node'] },
+      { ref: 'setI0', algorithmName: 'SET_INPUT_REGISTER', inputs: ['sid'], registerAs: 'I0' },
+    ],
+  },
+
+  // Step 3b: Use registers to do work
+  executionWorkflow: {
+    blocks: [
+      { ref: 'i0', algorithmName: 'FETCH_INPUT_REGISTER', parameters: { registerName: 'I0' } },
+      { ref: 'sum', algorithmName: 'COPY_FIRST_NUMBER', inputs: ['i0'] },
+    ],
+  },
+};
+
+
+const config2: IAnalysisConfigJSON = {
+  contextName: 'MyAnalysisContext',
+  analysisName: 'MyAnalysisTest',
+  description: 'Test',
+  anchorNodeId: "SpinalNode-91105bdb-c183-9010-ee00-78fac4a8d2b2-1879f44b78f",  // must be loaded in graph
+
+  // Step 2: Get children of anchor target as work nodes
+  worknodeResolver: {
+    blocks: [
+      { ref: 'kids', algorithmName: 'GET_NODE_CHILDREN', parameters: { regex: 'groupHasgeographicRoom' } },
+    ],
+  },
+
+  // Step 3a: For each work node, gather data into registers
+  inputWorkflow: {
+    blocks: [
+      { ref: 'sid', algorithmName: 'GET_NODE_SERVER_ID' },
+      { ref: 'setI0', algorithmName: 'SET_INPUT_REGISTER', inputs: ['sid'], registerAs: 'I0' },
+    ],
+  },
+
+  // Step 3b: Use registers to do work
+  executionWorkflow: {
+    blocks: [
+      { ref: 'i0', algorithmName: 'FETCH_INPUT_REGISTER', parameters: { registerName: 'I0' } },
+      { ref: 'sum', algorithmName: 'COPY_FIRST_NUMBER', inputs: ['i0'] },
+    ],
+  },
+};
+
+
 class SpinalMain {
-  constructor() {}
-  private handledAnalytics: AnalyticProcesses;
-  private durations: number[];
-  private googleChatService: GoogleChatService;
+
+  hubConnection: FileSystem;
+
+
+  constructor() { }
 
   public init() {
-    this.handledAnalytics = {};
-    this.durations = [];
 
-    console.log('Init connection to Google Services...');
-    this.googleChatService = new GoogleChatService(
-      process.env.GSERVICE_ACCOUNT_EMAIL,
-      process.env.GSERVICE_ACCOUNT_KEY
-    );
     console.log('Done.');
     console.log('Init connection to HUB...');
     const host = process.env.SPINALHUB_PORT
@@ -97,6 +155,7 @@ class SpinalMain {
     const url = `${process.env.SPINALHUB_PROTOCOL}://${process.env.USER_ID}:${process.env.USER_PASSWORD}@${host}/`;
     console.log('Connecting to', url);
     const conn = spinalCore.connect(url);
+    this.hubConnection = conn;
     ConfigFile.init(
       conn,
       process.env.ORGAN_NAME,
@@ -121,304 +180,49 @@ class SpinalMain {
         }
       );
     });
+
+
+
   }
 
-  public async getSpinalGeo(): Promise<SpinalContext<any>> {
-    const context = SpinalGraphService.getContext('spatial');
-    return context;
-  }
-
-  async initContext(): Promise<void> {
-    const spinalGeo = await this.getSpinalGeo();
-    await spinalGeo.findInContext(spinalGeo, (node) => {
+  async load<T extends Model>(server_id: number): Promise<T> {
+    if (!server_id) {
+      return Promise.reject('Invalid serverId');
+    }
+    if (typeof FileSystem._objects[server_id] !== 'undefined') {
       // @ts-ignore
-      SpinalGraphService._addNode(node);
-      return false;
-    });
-  }
-
-  private async handleAnalyticExecution(
-    id: string,
-    triggerObject: { triggerType: string; triggerValue: string },
-    entity?: SpinalNodeRef
-  ) {
-    const startTime = performance.now();
-    const date = moment().format('MMMM Do YYYY, h:mm:ss a');
-    console.log(`Executing analytic at ${date} ...`);
-    if (entity) {
-      spinalAnalyticExecutionService.doAnalysisOnEntity(id, entity).then((results) => {
-        const endTime = performance.now();
-        const elapsedTime = endTime - startTime;
-        for (const result of results) {
-          this.handleAnalyticResult(id, result);
-        }
-        console.log(
-          `Analysis completed in ${elapsedTime.toFixed(2)}ms at ${date}`
-        );
-        this.durations.push(elapsedTime);
-      });
-    } else {
-      spinalAnalyticExecutionService.doAnalysis(id, triggerObject).then((results) => {
-        const endTime = performance.now();
-        const elapsedTime = endTime - startTime;
-        for (const result of results) {
-          this.handleAnalyticResult(id, result);
-        }
-        console.log(
-          `Analysis completed in ${elapsedTime.toFixed(2)}ms at ${date}`
-        );
-        this.durations.push(elapsedTime);
-      });
+      return Promise.resolve(FileSystem._objects[server_id]);
+    }
+    try {
+      return await this.hubConnection.load_ptr(server_id);
+    } catch (error) {
+      throw new Error(`Error loading model with server_id: ${server_id}`);
     }
   }
 
-  private async handleAnalyticResult(analyticId: string, result: IResult) {
-    if (!result.success) console.error(result.error);
-    if (result && isResultSuccess(result)) {
-      await spinalAnalyticExecutionService.updateLastExecutionTime(analyticId);
-      if (
-        [
-          CONSTANTS.ANALYTIC_RESULT_TYPE.GCHAT_MESSAGE,
-          CONSTANTS.ANALYTIC_RESULT_TYPE.GCHAT_ORGAN_CARD,
-        ].includes(result.resultType) &&
-        result.resultValue === true
-      ) {
-        if (isGChatMessageResult(result))
-          this.googleChatService.sendTextMessage(
-            result.spaceName,
-            result.message
-          );
-        if (isGChatOrganCardResult(result))
-          this.googleChatService.sendCardMessage(result.spaceName, result.card);
-      }
-    }
-  }
 
-  private async handleAnalytic(analytic: SpinalNodeRef) {
-    const config = await spinalAnalyticNodeManagerService.getConfig(analytic.id.get());
-    const analyticConfig = await spinalAnalyticNodeManagerService.getAttributesFromNode(
-      config.id.get(),
-      CONSTANTS.CATEGORY_ATTRIBUTE_ANALYTIC_PARAMETERS
-    );
-    const isForceTrigger = analyticConfig[CONSTANTS.ATTRIBUTE_TRIGGER_AT_START];
-    const aggregateTrigger = analyticConfig[CONSTANTS.ATTRIBUTE_AGGREGATE_EXECUTION_TIME];
 
-    const triggerParams = await spinalAnalyticNodeManagerService.getAttributesFromNode(
-      config.id.get(),
-      CONSTANTS.CATEGORY_ATTRIBUTE_TRIGGER_PARAMETERS
-    );
-    if (isForceTrigger) {
-      console.log('Force trigger at start');
-      this.handleAnalyticExecution(analytic.id.get(), {
-        triggerType: 'Forced',
-        triggerValue: '',
-      });
-    }
 
-    for (const trigger of Object.keys(triggerParams)) {
-      const paramList = triggerParams[trigger].split(CONSTANTS.ATTRIBUTE_VALUE_SEPARATOR);
-      switch (paramList[0]) {
-        case CONSTANTS.TRIGGER_TYPE.INTERVAL_TIME: {
-          console.log('Interval time : ', paramList[1]);
-          const interval = setInterval(() => {
-            this.handleAnalyticExecution(analytic.id.get(), {
-              triggerType: CONSTANTS.TRIGGER_TYPE.INTERVAL_TIME,
-              triggerValue: paramList[1],
-            });
-          }, paramList[1]);
-          this.handledAnalytics[analytic.id.get()].Intervals.push(interval);
-          break;
-        }
-        case CONSTANTS.TRIGGER_TYPE.CHANGE_OF_VALUE: {
-          const entities =
-            await spinalAnalyticInputManagerService.getWorkingFollowedEntities(
-              analytic.id.get()
-            );
-          const targetIndex: string = paramList[1];
-          console.log('COV ON : ', targetIndex);
-          for (const entity of entities) {
-            const entryDataModel =
-              await spinalAnalyticInputManagerService.getEntryDataModelByInputIndex(
-                analytic.id.get(),
-                entity,
-                targetIndex
-              );
-            if (!entryDataModel) {
-              console.log(
-                `Couldn't fetch entry data model from followed entity :" ${entity.name.get()} ,therefore skipping`
-              );
-              continue;
-            }
-            if (Array.isArray(entryDataModel)) {
-              for (const entry of entryDataModel) {
-                this.createBinding(entry, analytic, entity, targetIndex);
-              }
-            } else
-              this.createBinding(entryDataModel, analytic, entity, targetIndex);
-          }
-          break;
-        }
-        case CONSTANTS.TRIGGER_TYPE.CHANGE_OF_VALUE_WITH_THRESHOLD: {
-          const entities =
-            await spinalAnalyticInputManagerService.getWorkingFollowedEntities(
-              analytic.id.get()
-            );
-          const targetIndex = paramList[1];
-          console.log('COVWT ON : ', targetIndex);
-          for (const entity of entities) {
-            const entryDataModel =
-              await spinalAnalyticInputManagerService.getEntryDataModelByInputIndex(
-                analytic.id.get(),
-                entity,
-                targetIndex
-              );
-            if (!entryDataModel) continue;
-            if (Array.isArray(entryDataModel)) {
-              for (const entry of entryDataModel) {
-                this.createBinding(entry, analytic, entity, targetIndex,paramList[2]);
-              }
-            } else
-              this.createBinding(entryDataModel, analytic, entity, targetIndex,paramList[2]);
-          }
-          break;
-        }
 
-        case CONSTANTS.TRIGGER_TYPE.CRON: {
-          const cronValue = aggregateTrigger || paramList[1];
-          console.log('CRON ON : ', cronValue);
-          const cronJob = new CronJob(cronValue, () => {
-            this.handleAnalyticExecution(analytic.id.get(), {
-              triggerType: CONSTANTS.TRIGGER_TYPE.CRON,
-              triggerValue: paramList[1],
-            });
-          });
-          cronJob.start();
-          this.handledAnalytics[analytic.id.get()].CronJobs.push(cronJob);
 
-          break;
-        }
-        default: {
-          console.log('Unknown trigger type : ', paramList[0]);
-          break;
-        }
-      }
-    }
-  }
-
-  public async createBinding(
-    entryDataModel: SpinalNodeRef | SpinalAttribute,
-    analytic: SpinalNodeRef,
-    entity: SpinalNodeRef,
-    targetIndex: string,
-    tresholdValue?: number
-  ) {
-    {
-      const valueModel: Model = await spinalAnalyticInputManagerService.getValueModelFromEntry(entryDataModel);
-      let previousValue = valueModel.get(); // store the previous value
-      const bindProcess = valueModel.bind(() => {
-        if (
-          valueModel.get() === previousValue ||
-          (tresholdValue &&
-            Math.abs(valueModel.get() - previousValue) <= tresholdValue)
-        ) {
-          console.log(
-            'Value not changed or did not exceed treshold, skipping analysis...'
-          );
-        } else {
-          previousValue = valueModel.get();
-          console.log('Value changed, starting analysis...');
-          this.handleAnalyticExecution(
-            analytic.id.get(),
-            {
-              triggerType: tresholdValue
-                ? CONSTANTS.TRIGGER_TYPE.CHANGE_OF_VALUE_WITH_THRESHOLD
-                : CONSTANTS.TRIGGER_TYPE.CHANGE_OF_VALUE,
-              triggerValue: targetIndex,
-            },
-            entity
-          );
-        }
-      }, false);
-      this.handledAnalytics[analytic.id.get()].Bindings.push({
-        entity: entity,
-        model: valueModel,
-        bindProcess: bindProcess,
-      });
-    }
-  }
 
   public async initJob() {
-    const contexts = spinalAnalyticNodeManagerService.getContexts();
-    for (const context of contexts) {
-      const analytics = await spinalAnalyticNodeManagerService.getAllAnalytics(
-        context.id.get()
-      );
-      for (const analytic of analytics) {
-        const config = await spinalAnalyticNodeManagerService.getConfig(analytic.id.get());
-        const analyticConfig =
-          await spinalAnalyticNodeManagerService.getAttributesFromNode(
-            config.id.get(),
-            CONSTANTS.CATEGORY_ATTRIBUTE_ANALYTIC_PARAMETERS
-          );
 
-        // Get the status of the analytic
-        const isActive =
-          analyticConfig[CONSTANTS.ATTRIBUTE_ANALYTIC_STATUS] === CONSTANTS.ANALYTIC_STATUS.ACTIVE;
-        if (!isActive && analytic.id.get() in this.handledAnalytics) {
-          console.log('Analytic has been desactivated. Unhandling ...');
-          // remove all intervals and bindings then delete the analytic from handledAnalytics
-          this.clearAnalytic(analytic.id.get());
-          continue;
-        }
-        // Check if the analytic is already handled
-        if (!isActive && !(analytic.id.get() in this.handledAnalytics)) {
-          continue;
-        }
+    const node: SpinalNode<any> = await this.load(1019638080);
+    SpinalGraphService._addNode(node);
 
-        if (isActive && analytic.id.get() in this.handledAnalytics) {
-          //console.log('Analytic already handled, skipping...');
-          // Analytic already handled so skip
-          continue;
-        }
+    // Create the full analysis graph structure
+    const createdNode = await spinalAnalysisFactoryService.createFromJSON(config2);
 
-        //Handle the analytic
-        console.log('Handling Analytic : ', analytic.name.get());
-        this.handledAnalytics[analytic.id.get()] = {
-          Intervals: [],
-          Bindings: [],
-          CronJobs: [],
-        };
-        this.handleAnalytic(analytic);
-      }
+
+    const analysisNode = await spinalAnalyticNodeManagerService.getAnalysisNode('MyAnalysisContext', 'MyAnalysisTest');
+    const result = await spinalAnalysisExecutionService.executeAnalysis(analysisNode);
+    console.log('Execution result:', result);
+    for (const res of result.results) {
+      console.log('Result for node', res.workNodeName, ':', res.executionOutputs);
     }
-  }
 
-  private getAverageDuration() {
-    return (
-      this.durations.reduce((sum, curr) => sum + curr, 0) /
-      this.durations.length
-    );
-  }
 
-  public resetReportVariables() {
-    this.durations = [];
-  }
-
-  private clearTriggers(analyticId: string) {
-    for (const interval of this.handledAnalytics[analyticId].Intervals) {
-      clearInterval(interval);
-    }
-    for (const cronJob of this.handledAnalytics[analyticId].CronJobs) {
-      cronJob.stop();
-    }
-    for (const binding of this.handledAnalytics[analyticId].Bindings) {
-      binding.model.unbind(binding.bindProcess);
-    }
-  }
-
-  private clearAnalytic(analyticId: string) {
-    this.clearTriggers(analyticId);
-    delete this.handledAnalytics[analyticId];
   }
 }
 
@@ -428,39 +232,11 @@ async function Main() {
   const spinalMain = new SpinalMain();
   await spinalMain.init();
 
-  spinalAnalyticExecutionService.initTwilioManagerService({
-    accountSid: process.env.TWILIO_SID,
-    authToken :process.env.TWILIO_TOKEN,
-    fromNumber : process.env.TWILIO_NUMBER
-  }
-  );
+  await spinalAnalyticNodeManagerService.createContext('MyAnalysisContext');
+
 
   await spinalMain.initJob();
 
-  setInterval(async () => {
-    await spinalMain.initJob();
-    spinalMain.resetReportVariables();
-  }, parseInt(process.env.UPDATE_ANALYTIC_QUEUE_TIMER));
 
-  // let next = Date.now() + parseInt(process.env.UPDATE_ANALYTIC_QUEUE_TIMER);
-
-  // while (true) {
-  //   if(Date.now() >= next) await spinalMain.initJob();
-  //   else await wait();
-  //   next = Date.now() + parseInt(process.env.UPDATE_ANALYTIC_QUEUE_TIMER);
-  // }
-
-  // function wait() {
-  //   return new Promise((resolve, reject) => {
-  //     setTimeout(() => {
-  //       resolve(true)
-  //     }, 500);
-  //   });
-  // }
-
-  /*setInterval(() => {
-    spinalMain.generateReport();
-    spinalMain.resetReportVariables();
-  }, parseInt(process.env.REPORT_TIMER));*/
 }
 Main();
