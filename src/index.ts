@@ -34,6 +34,7 @@ import {
   SpinalGraphService,
   SpinalContext,
   SpinalNodeRef,
+  SpinalNode as SpNode
 } from 'spinal-env-viewer-graph-service';
 
 import type { SpinalNode } from 'spinal-model-graph';
@@ -138,6 +139,79 @@ const config2: IAnalysisConfigJSON = {
 };
 
 
+const config3: IAnalysisConfigJSON = {
+  contextName: "MyAnalysisContext",
+  analysisName: "MyAnalysisTest",
+  anchorNodeId: "SpinalNode-91105bdb-c183-9010-ee00-78fac4a8d2b2-1879f44b78f",
+  worknodeResolver: {
+    blocks: [
+      { ref: "kids", algorithmName: "GET_NODE_CHILDREN", inputs: ["$node"], parameters: { "regex": "groupHasgeographicRoom" } }
+    ]
+  },
+  inputWorkflow: {
+    blocks: [
+      { ref: "Liste des Profiles ControlPoint", algorithmName: "GET_NODE_CHILDREN", inputs: ["$node"], parameters: { "regex": "hasControlPoint" } },
+      { ref: "Filtre profils de command", algorithmName: "FILTER_NODE", inputs: ["Liste des Profiles ControlPoint"], parameters: { "filterProperty": "name", "regexFilter": "Command" } },
+      { ref: "Profil de command", algorithmName: "FIRST_NODE", inputs: ["Filtre profils de command"] },
+
+      { ref: "Liste des ControlPoints", algorithmName: "GET_NODE_CHILDREN", inputs: ["Profil de command"], parameters: { "regex": "hasBmsEndpoint" } },
+      { ref: "Filtre ControlPoints", algorithmName: "FILTER_NODE", inputs: ["Liste des ControlPoints"], parameters: { "filterProperty": "name", "regexFilter": "COMMAND_TEMPERATURE" } },
+      { ref: "ControlPoint", algorithmName: "FIRST_NODE", inputs: ["Filtre ControlPoints"] },
+      { ref: "setI0", algorithmName: "SET_INPUT_REGISTER", inputs: ["ControlPoint"], registerAs: "I0" }
+    ]
+  },
+  executionWorkflow: {
+    blocks: [
+      { ref: "Control Point COMMAND_TEMPERATURE", algorithmName: "FETCH_INPUT_REGISTER", parameters: { "registerName": "I0" } },
+      { ref: "Valeur actuelle", algorithmName: "ENDPOINT_NODE_CURRENT_VALUE", inputs: ["Control Point COMMAND_TEMPERATURE"] }
+    ]
+  }
+}
+
+
+const config4: IAnalysisConfigJSON = {
+  contextName: "MyAnalysisContext",
+  analysisName: "MyAnalysisTest-config4",
+  anchorNodeId: "SpinalNode-91105bdb-c183-9010-ee00-78fac4a8d2b2-1879f44b78f",
+  worknodeResolver: {
+    blocks: [
+      { ref: "kids", algorithmName: "GET_NODE_CHILDREN", inputs: ["$node"], parameters: { "regex": "groupHasgeographicRoom" } }
+    ]
+  },
+  inputWorkflow: {
+    blocks: [
+      { ref: "Liste des Profiles ControlPoint", algorithmName: "GET_NODE_CHILDREN", inputs: ["$node"], parameters: { "regex": "hasControlPoint" } },
+      { ref: "Filtre profils de command", algorithmName: "FILTER_NODE", inputs: ["Liste des Profiles ControlPoint"], parameters: { "filterProperty": "name", "regexFilter": "Command" } },
+      { ref: "Profil de command", algorithmName: "FIRST_NODE", inputs: ["Filtre profils de command"] },
+      { ref: "Liste des ControlPoints", algorithmName: "GET_NODE_CHILDREN", inputs: ["Profil de command"], parameters: { "regex": "hasBmsEndpoint" } },
+      { ref: "setI0", algorithmName: "SET_INPUT_REGISTER", inputs: ["Liste des ControlPoints"], registerAs: "I0" }
+
+    ]
+  },
+  executionWorkflow: {
+    blocks: [
+      { ref: "COMMAND CPs", algorithmName: "FETCH_INPUT_REGISTER", parameters: { "registerName": "I0" } },
+      {
+        ref: "allValues",
+        algorithmName: "FOREACH",
+        inputs: ["COMMAND CPs"],
+        subWorkflow: {
+          outputRef: "val",
+          blocks: [
+            { ref: "val", algorithmName: "ENDPOINT_NODE_CURRENT_VALUE", inputs: ["$item"] }
+          ]
+        }
+      },
+      { ref: "sum", algorithmName: "SUM_NUMBERS", inputs: ["allValues"] },
+
+    ]
+  }
+}
+
+
+
+
+
 class SpinalMain {
 
   hubConnection: FileSystem;
@@ -202,6 +276,9 @@ class SpinalMain {
 
 
 
+  private isSpinalNodeArray(nodes: any): boolean {
+    return Array.isArray(nodes) && nodes.every(node => node.getName && typeof node.getName === 'function');
+  }
 
 
 
@@ -211,15 +288,33 @@ class SpinalMain {
     const node: SpinalNode<any> = await this.load(1019638080);
     SpinalGraphService._addNode(node);
 
-    // Create the full analysis graph structure
-    const createdNode = await spinalAnalysisFactoryService.createFromJSON(config2);
+    let analysisNode;
+    analysisNode = await spinalAnalyticNodeManagerService.getAnalysisNode('MyAnalysisContext', 'MyAnalysisTest-config4');
+    if (!analysisNode) {
+      analysisNode = await spinalAnalysisFactoryService.createFromJSON(config4);
+    }
 
-
-    const analysisNode = await spinalAnalyticNodeManagerService.getAnalysisNode('MyAnalysisContext', 'MyAnalysisTest');
     const result = await spinalAnalysisExecutionService.executeAnalysis(analysisNode);
     console.log('Execution result:', result);
     for (const res of result.results) {
-      console.log('Result for node', res.workNodeName, ':', res.executionOutputs);
+      // console.log(`Worknode: ${res.workNodeName}, Output:`, res.executionOutputs);
+      console.log(` ---- WORKNODE ${res.workNodeName} OUTPUTS ---- `);
+
+      for (const outputKey of Object.keys(res.executionOutputs)) {
+        let output: any;
+        if (res.executionOutputs[outputKey] instanceof SpNode) {
+          const node: SpNode = res.executionOutputs[outputKey] as SpNode;
+          output = `NODE[${node?.getName()?.get()}]`;
+        }
+        else if (this.isSpinalNodeArray(res.executionOutputs[outputKey])) {
+          output = (res.executionOutputs[outputKey] as SpNode[]).map((node: SpNode) => `NODE[${node?.getName()?.get()}]`);
+        }
+        else {
+          output = res.executionOutputs[outputKey];
+        }
+
+        console.log(`Output ${outputKey}:`, output);
+      }
     }
 
 
