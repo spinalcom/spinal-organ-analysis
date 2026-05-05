@@ -40,7 +40,7 @@ import {
 import type { SpinalNode } from 'spinal-model-graph';
 
 import { SpinalAttribute } from 'spinal-models-documentation';
-import { GoogleChatService } from 'spinal-service-gchat-messenger';
+
 import { CronJob } from 'cron';
 import { performance } from 'perf_hooks';
 import moment from 'moment';
@@ -52,6 +52,9 @@ import {
   spinalAnalyticNodeManagerService,
   IAnalysisConfigJSON,
 } from 'spinal-model-analysis';
+
+import { logExecutionResult } from './utils';
+
 
 require('dotenv').config();
 
@@ -214,7 +217,7 @@ const config4: IAnalysisConfigJSON = {
 
 class SpinalMain {
 
-  hubConnection: FileSystem;
+  hubConnection!: FileSystem;
 
 
   constructor() { }
@@ -232,15 +235,15 @@ class SpinalMain {
     this.hubConnection = conn;
     ConfigFile.init(
       conn,
-      process.env.ORGAN_NAME,
-      process.env.ORGAN_TYPE,
-      process.env.SPINALHUB_IP,
-      parseInt(process.env.SPINALHUB_PORT)
+      process.env.ORGAN_NAME!,
+      process.env.ORGAN_TYPE!,
+      process.env.SPINALHUB_IP!,
+      parseInt(process.env.SPINALHUB_PORT!)
     );
     return new Promise((resolve, reject) => {
       spinalCore.load(
         conn,
-        process.env.DIGITALTWIN_PATH,
+        process.env.DIGITALTWIN_PATH!,
         async (graph: any) => {
           await SpinalGraphService.setGraph(graph);
           console.log('Done.');
@@ -295,27 +298,8 @@ class SpinalMain {
     }
 
     const result = await spinalAnalysisExecutionService.executeAnalysis(analysisNode);
-    console.log('Execution result:', result);
-    for (const res of result.results) {
-      // console.log(`Worknode: ${res.workNodeName}, Output:`, res.executionOutputs);
-      console.log(` ---- WORKNODE ${res.workNodeName} OUTPUTS ---- `);
 
-      for (const outputKey of Object.keys(res.executionOutputs)) {
-        let output: any;
-        if (res.executionOutputs[outputKey] instanceof SpNode) {
-          const node: SpNode = res.executionOutputs[outputKey] as SpNode;
-          output = `NODE[${node?.getName()?.get()}]`;
-        }
-        else if (this.isSpinalNodeArray(res.executionOutputs[outputKey])) {
-          output = (res.executionOutputs[outputKey] as SpNode[]).map((node: SpNode) => `NODE[${node?.getName()?.get()}]`);
-        }
-        else {
-          output = res.executionOutputs[outputKey];
-        }
-
-        console.log(`Output ${outputKey}:`, output);
-      }
-    }
+    logExecutionResult(result);
 
 
   }
