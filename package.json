@@ -1,6 +1,6 @@
 {
   "name": "spinal-organ-analysis",
-  "version": "3.2.0",
+  "version": "4.0.0",
   "description": "Organ that handles analysis routines",
   "main": "index.js",
   "scripts": {
@@ -8,27 +8,17 @@
     "start:dev": "npm run build:dev && node dist/index.js",
     "build": "rm -rf dist declarations && tsc",
     "build:dev": "npm run cp:analysis && npm run build",
-    "cp:analysis": "rm -rf node_modules/spinal-model-analysis && cp -r ../spinal-model-analysis ./node_modules",
-    "cp:timeseries": "rm -rf node_modules/spinal-model-timeseries && cp -r ../../bos_covivio_01092022/spinal-viewer_covivio_10100/analysis/node_modules/spinal-model-timeseries ./node_modules",
-    "delete-rec-dep": "find node_modules/ -path '*/node_modules/*' -type d -name 'spinal-*' -exec rm -r {} +",
+    "cp:analysis": "rm -rf node_modules/spinal-model-analysis && cp -r ../../../Dev/spinal-model-analysis ./node_modules/spinal-model-analysis",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "chart.js": "^4.4.1",
     "cron": "^3.1.6",
-    "cron-parser": "^4.9.0",
-    "dotenv": "^15.0.0",
-    "ejs": "^3.1.9",
-    "googleapis": "^118.0.0",
-    "lodash": "^4.17.21",
-    "moment": "^2.29.4",
-    "path": "^0.12.7"
+    "dotenv": "^15.0.0"
   },
   "devDependencies": {
-    "@types/ejs": "^3.1.2",
     "@types/node": "^18.11.18",
     "typescript": "^4.9.5"
   },
@@ -36,12 +26,8 @@
     "spinal-core-connectorjs": "spinal-core-connectorjs",
     "spinal-core-connectorjs_type": "spinal-core-connectorjs_type",
     "spinal-env-viewer-graph-service": "Spinal-Graph-Service",
-    "spinal-env-viewer-plugin-documentation-service": "spinal-env-viewer-plugin-documentation-service",
     "spinal-lib-organ-monitoring": "spinal-lib-organ-monitoring",
-    "spinal-model-analysis": "spinal-model-analysis@stable-v3",
-    "spinal-model-bmsnetwork": "spinal-model-bmsnetwork",
-    "spinal-model-graph": "spinal-model-graph",
-    "spinal-service-gchat-messenger": "spinal-service-gchat-messenger",
-    "spinal-service-ticket": "spinal-service-ticket"
+    "spinal-model-analysis": "spinal-model-analysis",
+    "spinal-model-graph": "spinal-model-graph"
   }
 }
