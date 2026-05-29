@@ -16,7 +16,6 @@ export function isSpinalNodeArray(nodes: any): boolean {
 
 export function logExecutionResult(result: AnalysisExecutionResult) {
     for (const res of result.results) {
-        // console.log(`Worknode: ${res.workNodeName}, Output:`, res.executionOutputs);
         console.log(` ---- WORKNODE ${res.workNodeName} OUTPUTS ---- `);
         for (const outputKey of Object.keys(res.executionOutputs!)) {
             let output: any;

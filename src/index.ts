@@ -43,7 +43,6 @@ import { SpinalAttribute } from 'spinal-models-documentation';
 
 import { CronJob } from 'cron';
 import { performance } from 'perf_hooks';
-import moment from 'moment';
 import { setInterval } from 'timers';
 
 import {
@@ -172,9 +171,9 @@ const config3: IAnalysisConfigJSON = {
 }
 
 
-const config4: IAnalysisConfigJSON = {
+const configToCreate: IAnalysisConfigJSON = {
   contextName: "MyAnalysisContext",
-  analysisName: "MyAnalysisTest-config4",
+  analysisName: "MyAnalysisTest-config1",
   anchorNodeId: "SpinalNode-91105bdb-c183-9010-ee00-78fac4a8d2b2-1879f44b78f",
   worknodeResolver: {
     blocks: [
@@ -184,16 +183,24 @@ const config4: IAnalysisConfigJSON = {
   inputWorkflow: {
     blocks: [
       { ref: "Liste des Profiles ControlPoint", algorithmName: "GET_NODE_CHILDREN", inputs: ["$node"], parameters: { "regex": "hasControlPoint" } },
-      { ref: "Filtre profils de command", algorithmName: "FILTER_NODE", inputs: ["Liste des Profiles ControlPoint"], parameters: { "filterProperty": "name", "regexFilter": "Command" } },
-      { ref: "Profil de command", algorithmName: "FIRST_NODE", inputs: ["Filtre profils de command"] },
+      { ref: "Filtre profil de command", algorithmName: "FILTER_NODE", inputs: ["Liste des Profiles ControlPoint"], parameters: { "filterProperty": "name", "regexFilter": "Command" } },
+      { ref: "Profil de command", algorithmName: "FIRST_NODE", inputs: ["Filtre profil de command"] },
       { ref: "Liste des ControlPoints", algorithmName: "GET_NODE_CHILDREN", inputs: ["Profil de command"], parameters: { "regex": "hasBmsEndpoint" } },
-      { ref: "setI0", algorithmName: "SET_INPUT_REGISTER", inputs: ["Liste des ControlPoints"], registerAs: "I0" }
+      { ref: "setI0", algorithmName: "SET_INPUT_REGISTER", inputs: ["Liste des ControlPoints"], registerAs: "I0" },
 
+
+      { ref: "Filtre profil occupation", algorithmName: "FILTER_NODE", inputs: ["Liste des Profiles ControlPoint"], parameters: { "filterProperty": "name", "regexFilter": "Occupation" } },
+      { ref: "Profil occupation", algorithmName: "FIRST_NODE", inputs: ["Filtre profil occupation"] },
+      { ref: "Liste des ControlPoints occupation", algorithmName: "GET_NODE_CHILDREN", inputs: ["Profil occupation"], parameters: { "regex": "hasBmsEndpoint" } },
+      { ref: "Filtre EP presence", algorithmName: "FILTER_NODE", inputs: ["Liste des ControlPoints occupation"], parameters: { "filterProperty": "name", "regexFilter": "Présence" } },
+      { ref: "EP presence", algorithmName: "FIRST_NODE", inputs: ["Filtre EP presence"] },
+      { ref: "setI1", algorithmName: "SET_INPUT_REGISTER", inputs: ["EP presence"], registerAs: "I1" }
     ]
   },
   executionWorkflow: {
     blocks: [
       { ref: "COMMAND CPs", algorithmName: "FETCH_INPUT_REGISTER", parameters: { "registerName": "I0" } },
+      { ref: "Endpoint PRES", algorithmName: "FETCH_INPUT_REGISTER", parameters: { "registerName": "I1" } },
       {
         ref: "allValues",
         algorithmName: "FOREACH",
@@ -206,10 +213,255 @@ const config4: IAnalysisConfigJSON = {
         }
       },
       { ref: "sum", algorithmName: "SUM_NUMBERS", inputs: ["allValues"] },
+      { ref: "threshold above", algorithmName: "GREATER_THAN", inputs: ["sum"], parameters: { "threshold": 30 } },
+      {
+        ref: "if", algorithmName: "IF", inputs: ["threshold above"], thenWorkflow: {
+          outputRef: "put 2",
+          blocks: [
+            { ref: "random", algorithmName: "RANDOM_NUMBER", inputs: [], parameters: { min: 1, max: 100 } },
+            { ref: "put 2", algorithmName: "SET_ENDPOINT_VALUE", inputs: ["Endpoint PRES", "random"] }
+          ]
+        },
+        elseWorkflow: {
+          outputRef: "put 1",
+          blocks: [
+            { ref: "put 1", algorithmName: "SET_ENDPOINT_VALUE_PARAM", inputs: ["Endpoint PRES"], parameters: { value: "1" } }
+          ]
+        }
+      }
 
     ]
   }
 }
+
+const configToCreate2: IAnalysisConfigJSON =
+{
+  "contextName": "MyAnalysisContext",
+  "analysisName": "MyAnalysisTest-config1",
+  "analysisId": 101750270161408,
+  "description": "",
+  "anchorNodeId": "SpinalNode-91105bdb-c183-9010-ee00-78fac4a8d2b2-1879f44b78f",
+  "worknodeResolver": {
+    "blocks": [
+      {
+        "ref": "kids",
+        "algorithmName": "GET_NODE_CHILDREN",
+        "parameters": {
+          "regex": "groupHasgeographicRoom"
+        },
+        "inputs": [
+          "$node"
+        ]
+      }
+    ]
+  },
+  "inputWorkflow": {
+    "blocks": [
+      {
+        "ref": "Liste des Profiles ControlPoint",
+        "algorithmName": "GET_NODE_CHILDREN",
+        "parameters": {
+          "regex": "hasControlPoint"
+        },
+        "inputs": [
+          "$node"
+        ]
+      },
+      {
+        "ref": "Filtre profil de command",
+        "algorithmName": "FILTER_NODE",
+        "parameters": {
+          "filterProperty": "name",
+          "regexFilter": "Command"
+        },
+        "inputs": [
+          "Liste des Profiles ControlPoint"
+        ]
+      },
+      {
+        "ref": "Profil de command",
+        "algorithmName": "FIRST_NODE",
+        "inputs": [
+          "Filtre profil de command"
+        ]
+      },
+      {
+        "ref": "Liste des ControlPoints",
+        "algorithmName": "GET_NODE_CHILDREN",
+        "parameters": {
+          "regex": "hasBmsEndpoint"
+        },
+        "inputs": [
+          "Profil de command"
+        ]
+      },
+      {
+        "ref": "setI0",
+        "algorithmName": "SET_INPUT_REGISTER",
+        "inputs": [
+          "Liste des ControlPoints"
+        ],
+        "registerAs": "I0"
+      },
+      {
+        "ref": "Filtre profil occupation",
+        "algorithmName": "FILTER_NODE",
+        "parameters": {
+          "filterProperty": "name",
+          "regexFilter": "Occupation"
+        },
+        "inputs": [
+          "Liste des Profiles ControlPoint"
+        ]
+      },
+      {
+        "ref": "Profil occupation",
+        "algorithmName": "FIRST_NODE",
+        "inputs": [
+          "Filtre profil occupation"
+        ]
+      },
+      {
+        "ref": "Liste des ControlPoints occupation",
+        "algorithmName": "GET_NODE_CHILDREN",
+        "parameters": {
+          "regex": "hasBmsEndpoint"
+        },
+        "inputs": [
+          "Profil occupation"
+        ]
+      },
+      {
+        "ref": "Filtre EP presence",
+        "algorithmName": "FILTER_NODE",
+        "parameters": {
+          "filterProperty": "name",
+          "regexFilter": "Présence"
+        },
+        "inputs": [
+          "Liste des ControlPoints occupation"
+        ]
+      },
+      {
+        "ref": "EP presence",
+        "algorithmName": "FIRST_NODE",
+        "inputs": [
+          "Filtre EP presence"
+        ]
+      },
+      {
+        "ref": "setI1",
+        "algorithmName": "SET_INPUT_REGISTER",
+        "inputs": [
+          "EP presence"
+        ],
+        "registerAs": "I1"
+      }
+    ]
+  },
+  "executionWorkflow": {
+    "blocks": [
+      {
+        "ref": "COMMAND CPs",
+        "algorithmName": "FETCH_INPUT_REGISTER",
+        "parameters": {
+          "registerName": "I0"
+        }
+      },
+      {
+        "ref": "Endpoint PRES",
+        "algorithmName": "FETCH_INPUT_REGISTER",
+        "parameters": {
+          "registerName": "I1"
+        }
+      },
+      {
+        "ref": "allValues",
+        "algorithmName": "FOREACH",
+        "inputs": [
+          "COMMAND CPs"
+        ],
+        "subWorkflow": {
+          "blocks": [
+            {
+              "ref": "val",
+              "algorithmName": "ENDPOINT_NODE_CURRENT_VALUE",
+              "inputs": [
+                "$item"
+              ]
+            }
+          ],
+          "outputRef": "val"
+        }
+      },
+      {
+        "ref": "sum",
+        "algorithmName": "SUM_NUMBERS",
+        "inputs": [
+          "allValues"
+        ]
+      },
+      {
+        "ref": "threshold above",
+        "algorithmName": "GREATER_THAN",
+        "parameters": {
+          "threshold": 30
+        },
+        "inputs": [
+          "sum"
+        ]
+      },
+      {
+        "ref": "if",
+        "algorithmName": "IF",
+        "inputs": [
+          "threshold above",
+          "COMMAND CPs",
+          "sum",
+          "Endpoint PRES"
+        ],
+        "thenWorkflow": {
+          "blocks": [
+            {
+              "ref": "random",
+              "algorithmName": "RANDOM_NUMBER",
+              "parameters": {
+                "min": 1,
+                "max": 100
+              }
+            },
+            {
+              "ref": "put 2",
+              "algorithmName": "SET_ENDPOINT_VALUE",
+              "inputs": [
+                "Endpoint PRES",
+                "random"
+              ]
+            }
+          ],
+          "outputRef": "put 2"
+        },
+        "elseWorkflow": {
+          "blocks": [
+            {
+              "ref": "put 1",
+              "algorithmName": "SET_ENDPOINT_VALUE_PARAM",
+              "parameters": {
+                "value": "1"
+              },
+              "inputs": [
+                "Endpoint PRES"
+              ]
+            }
+          ],
+          "outputRef": "put 1"
+        }
+      }
+
+    ]
+  }
+}
+
 
 
 
@@ -288,13 +540,21 @@ class SpinalMain {
 
   public async initJob() {
 
-    const node: SpinalNode<any> = await this.load(1019638080);
+    const node: SpinalNode<any> = await this.load(1019638080); // group
     SpinalGraphService._addNode(node);
 
+
+    const graph = SpinalGraphService.getGraph()
+
     let analysisNode;
-    analysisNode = await spinalAnalyticNodeManagerService.getAnalysisNode('MyAnalysisContext', 'MyAnalysisTest-config4');
+    analysisNode = await spinalAnalyticNodeManagerService.getAnalysisNode('MyAnalysisContext', 'MyAnalysisTest-config1', graph);
     if (!analysisNode) {
-      analysisNode = await spinalAnalysisFactoryService.createFromJSON(config4);
+      analysisNode = await spinalAnalysisFactoryService.createFromJSON(configToCreate, graph);
+    }
+    else {
+      await spinalAnalyticNodeManagerService.deleteAnalysisNode(analysisNode);
+      console.log('Deleted existing analysis node, creating a new one with the config...');
+      analysisNode = await spinalAnalysisFactoryService.createFromJSON(configToCreate, graph);
     }
 
     const result = await spinalAnalysisExecutionService.executeAnalysis(analysisNode);
@@ -311,7 +571,7 @@ async function Main() {
   const spinalMain = new SpinalMain();
   await spinalMain.init();
 
-  await spinalAnalyticNodeManagerService.createContext('MyAnalysisContext');
+  await spinalAnalyticNodeManagerService.createContext('MyAnalysisContext', SpinalGraphService.getGraph());
 
 
   await spinalMain.initJob();
@@ -319,3 +579,22 @@ async function Main() {
 
 }
 Main();
+
+
+
+// const triggers = await spinalAnalysisTriggerService.getTriggerConfig(analysisNode);
+
+// for (const trigger of triggers) {
+//   if (trigger.type === TRIGGER_TYPE.INTERVAL_TIME) {
+//     setInterval(() => executeAnalysis(analysisNode), trigger.value as number);
+//   } else if (trigger.type === TRIGGER_TYPE.CRON) {
+//     cron.schedule(trigger.value as string, () => executeAnalysis(analysisNode));
+//   } else if (trigger.type === TRIGGER_TYPE.COV) {
+//     const bindings = await spinalAnalysisTriggerService.resolveInputRegistersForBinding(analysisNode);
+//     for (const { inputRegisters } of bindings) {
+//       for (const [, model] of inputRegisters) {
+//         (model as any).bind(() => executeAnalysis(analysisNode));
+//       }
+//     }
+//   }
+// }
