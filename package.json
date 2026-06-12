@@ -7,8 +7,6 @@
     "start": "node dist/index.js",
     "start:dev": "npm run build:dev && node dist/index.js",
     "build": "rm -rf dist declarations && tsc",
-    "build:dev": "npm run cp:analysis && npm run build",
-    "cp:analysis": "rm -rf node_modules/spinal-model-analysis && cp -r ../../../Dev/spinal-model-analysis ./node_modules/spinal-model-analysis",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

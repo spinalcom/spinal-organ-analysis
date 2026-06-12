@@ -5,3 +5,4 @@ dist
 src/config.ts
 old_node_modules
 report.html
+rsync-model-analysis.sh

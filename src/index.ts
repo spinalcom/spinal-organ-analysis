@@ -34,6 +34,7 @@ require('dotenv').config();
 interface COVBinding {
   triggerId?: string;
   inputRegister: string;
+  workNode: SpinalNode<any>;
   model: Model;
   bindProcess: Process;
   threshold?: number;
@@ -285,7 +286,9 @@ class SpinalOrganAnalysis {
         if (currentValue === previousValue) return;
 
         previousValue = currentValue;
-        this.executeAnalysis(analysisNode, {
+        // COV fires per bound model, so only run the work node that owns it —
+        // not the whole analysis (which would re-run every work node).
+        this.executeAnalysisForWorkNode(analysisNode, binding.workNode, {
           referenceTime: Date.now(),
           trigger: {
             id: trigger.id,
@@ -299,6 +302,7 @@ class SpinalOrganAnalysis {
       handle.bindings.push({
         triggerId: trigger.id,
         inputRegister: registerName,
+        workNode: binding.workNode,
         model,
         bindProcess,
         threshold: trigger.threshold,
@@ -335,6 +339,46 @@ class SpinalOrganAnalysis {
     } catch (e: any) {
       const elapsed = (performance.now() - startTime).toFixed(2);
       console.error(`[Organ] Analysis "${name}" failed after ${elapsed}ms: ${e.message}`);
+    }
+  }
+
+  /**
+   * Runs the analysis pipeline for a single work node (used by COV triggers,
+   * which fire per bound model rather than for the whole analysis).
+   */
+  private async executeAnalysisForWorkNode(
+    analysisNode: SpinalNode<any>,
+    workNode: SpinalNode<any>,
+    metadata: ExecutionMetadata
+  ): Promise<void> {
+    const name = analysisNode.getName().get();
+    const workNodeName = workNode.getName().get();
+    const startTime = performance.now();
+
+    try {
+      const result: AnalysisExecutionResult =
+        await spinalAnalysisExecutionService.executeAnalysisForWorkNode(
+          analysisNode,
+          workNode,
+          metadata
+        );
+
+      const elapsed = (performance.now() - startTime).toFixed(2);
+      const r = result.results[0];
+      if (r?.success) {
+        console.log(
+          `[Organ] Analysis "${name}" on "${workNodeName}" complete (${elapsed}ms)`
+        );
+      } else {
+        console.error(
+          `[Organ] Analysis "${name}" on "${workNodeName}" failed (${elapsed}ms): ${r?.error}`
+        );
+      }
+    } catch (e: any) {
+      const elapsed = (performance.now() - startTime).toFixed(2);
+      console.error(
+        `[Organ] Analysis "${name}" on "${workNodeName}" failed after ${elapsed}ms: ${e.message}`
+      );
     }
   }
 
