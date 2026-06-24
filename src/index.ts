@@ -106,17 +106,27 @@ class SpinalOrganAnalysis {
   /**
    * Scans all analysis contexts and sets up triggers for new/active analyses.
    * Clears triggers for analyses that have been removed or deactivated.
+   *
+   * Only analyses whose lifecycle status is "Active" are started/bound. Analyses
+   * that are "Inactive" (the default) are left parked — present in the database
+   * but not running. Flipping the status attribute takes effect on the next sync.
    */
   public async syncAnalytics(): Promise<void> {
     const contexts = await spinalAnalyticNodeManagerService.getContexts(this.graph);
-    const activeIds = new Set<string>();
+    // Tracks analyses that should currently be running (exist AND status=Active).
+    const runningIds = new Set<string>();
 
     for (const context of contexts) {
       const analysisNodes = await spinalAnalyticNodeManagerService.getAnalysisNodesByContextNode(context);
 
       for (const analysisNode of analysisNodes) {
         const id = analysisNode.getId().get();
-        activeIds.add(id);
+
+        // Gate on lifecycle status — only run Active analyses.
+        const isActive = await spinalAnalyticNodeManagerService.isAnalysisActive(analysisNode);
+        if (!isActive) continue; // Inactive → leave parked (cleanup below stops it if it was running)
+
+        runningIds.add(id);
 
         // Skip if already handled
         if (this.handledAnalytics.has(id)) continue;
@@ -125,10 +135,11 @@ class SpinalOrganAnalysis {
       }
     }
 
-    // Cleanup: remove handles for analyses no longer in graph
+    // Cleanup: stop analyses no longer running — either removed from the graph
+    // or deactivated (status flipped to Inactive).
     for (const [id] of this.handledAnalytics) {
-      if (!activeIds.has(id)) {
-        console.log(`[Organ] Analysis ${id} removed from graph. Clearing triggers.`);
+      if (!runningIds.has(id)) {
+        console.log(`[Organ] Analysis ${id} removed or deactivated. Clearing triggers.`);
         this.clearAnalytic(id);
       }
     }
