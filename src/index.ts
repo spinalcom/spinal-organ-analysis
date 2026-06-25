@@ -45,6 +45,8 @@ interface AnalyticHandle {
   intervals: NodeJS.Timeout[];
   cronJobs: CronJob[];
   bindings: COVBinding[];
+  /** lastUpdate revision the analysis was set up with; used to detect config changes. */
+  revision: number;
 }
 
 type HandledAnalytics = Map<string, AnalyticHandle>;
@@ -128,10 +130,23 @@ class SpinalOrganAnalysis {
 
         runningIds.add(id);
 
-        // Skip if already handled
-        if (this.handledAnalytics.has(id)) continue;
+        const revision = spinalAnalyticNodeManagerService.getLastUpdate(analysisNode);
+        const handle = this.handledAnalytics.get(id);
 
-        await this.setupAnalysis(analysisNode);
+        if (handle) {
+          // Already running — re-setup only if the analysis was updated since.
+          if (handle.revision !== revision) {
+            console.log(
+              `[Organ] Analysis "${analysisNode.getName().get()}" (${id}) changed ` +
+              `(rev ${handle.revision} → ${revision}). Re-assessing.`
+            );
+            this.clearAnalytic(id);
+            await this.setupAnalysis(analysisNode, revision);
+          }
+          continue;
+        }
+
+        await this.setupAnalysis(analysisNode, revision);
       }
     }
 
@@ -147,7 +162,7 @@ class SpinalOrganAnalysis {
 
   // ─── ANALYSIS SETUP ───────────────────────────────────
 
-  private async setupAnalysis(analysisNode: SpinalNode<any>): Promise<void> {
+  private async setupAnalysis(analysisNode: SpinalNode<any>, revision: number = 0): Promise<void> {
     const id = analysisNode.getId().get();
     const name = analysisNode.getName().get();
     console.log(`[Organ] Setting up analysis: ${name} (${id})`);
@@ -156,6 +171,7 @@ class SpinalOrganAnalysis {
       intervals: [],
       cronJobs: [],
       bindings: [],
+      revision,
     };
     this.handledAnalytics.set(id, handle);
 
