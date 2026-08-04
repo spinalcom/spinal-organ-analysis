@@ -15,12 +15,15 @@ import {
   spinalAnalysisExecutionService,
   spinalAnalysisTriggerService,
   TRIGGER_TYPE,
+  loadOrCreateAssignmentFile,
+  readAssignment,
 } from 'spinal-model-analysis';
 import type {
   IResolvedTrigger,
   ICOVBindingResult,
   AnalysisExecutionResult,
   ExecutionMetadata,
+  AnalysisAssignmentModel,
 } from 'spinal-model-analysis';
 import { CronJob } from 'cron';
 import { performance } from 'perf_hooks';
@@ -69,6 +72,15 @@ class SpinalOrganAnalysis {
   private handledAnalytics: HandledAnalytics = new Map();
   private graph!: SpinalGraph<any>;
 
+  /** This organ's name = key of its assignment file in the hub (/etc/Organs/Analysis/<name>). */
+  private readonly organName: string = process.env.ORGAN_NAME ?? 'spinal-organ-analysis';
+  /**
+   * Live assignment record for this organ, or null if it couldn't be loaded (in which case
+   * the organ falls back to running everything). When the record's `enabled` is false, the
+   * organ also runs everything — assignment is fully opt-in.
+   */
+  private assignment: AnalysisAssignmentModel | null = null;
+
   // ─── INITIALIZATION ──────────────────────────────────
 
   public async init(): Promise<void> {
@@ -101,6 +113,23 @@ class SpinalOrganAnalysis {
 
     await SpinalGraphService.setGraph(this.graph);
     console.log('[Organ] Graph loaded.');
+
+    // Load (or create) this organ's assignment file. Absent/disabled → run everything.
+    try {
+      this.assignment = await loadOrCreateAssignmentFile(this.organName, conn);
+      const state = readAssignment(this.assignment);
+      console.log(
+        `[Organ] Assignment ready for "${this.organName}": ` +
+        (state.enabled
+          ? `ASSIGNED mode — ${state.analytics.length} analytic(s) assigned.`
+          : 'run-all mode (assignment disabled).')
+      );
+    } catch (e: any) {
+      console.error(
+        `[Organ] Could not load assignment file for "${this.organName}"; running in run-all mode. ${e?.message ?? e}`
+      );
+      this.assignment = null;
+    }
   }
 
   // ─── POLLING LOOP ─────────────────────────────────────
@@ -115,8 +144,18 @@ class SpinalOrganAnalysis {
    */
   public async syncAnalytics(): Promise<void> {
     const contexts = await spinalAnalyticNodeManagerService.getContexts(this.graph);
-    // Tracks analyses that should currently be running (exist AND status=Active).
+    // Tracks analyses that should currently be running (exist AND status=Active AND assigned).
     const runningIds = new Set<string>();
+
+    // Read the assignment record fresh each sync so api-server changes (enable/disable, add/
+    // remove) take effect on the next poll without a restart. Disabled or unloaded → run all.
+    const assignment = readAssignment(this.assignment);
+    const assignedSet = new Set(assignment.analytics);
+    if (assignment.enabled) {
+      console.log(
+        `[Organ] Assignment mode ON — will handle ${assignedSet.size} assigned Active analytic(s).`
+      );
+    }
 
     for (const context of contexts) {
       const analysisNodes = await spinalAnalyticNodeManagerService.getAnalysisNodesByContextNode(context);
@@ -127,6 +166,11 @@ class SpinalOrganAnalysis {
         // Gate on lifecycle status — only run Active analyses.
         const isActive = await spinalAnalyticNodeManagerService.isAnalysisActive(analysisNode);
         if (!isActive) continue; // Inactive → leave parked (cleanup below stops it if it was running)
+
+        // Assignment gate (opt-in load splitting): when enabled, only handle assigned analyses.
+        // Not added to runningIds when skipped, so the cleanup pass stops it if it was running
+        // here before being reassigned to another organ.
+        if (assignment.enabled && !assignedSet.has(id)) continue;
 
         runningIds.add(id);
 
