@@ -161,7 +161,9 @@ class SpinalOrganAnalysis {
       const analysisNodes = await spinalAnalyticNodeManagerService.getAnalysisNodesByContextNode(context);
 
       for (const analysisNode of analysisNodes) {
-        const id = analysisNode.getId().get();
+        // server_id is stable per-node across processes in modern BOS — the key assignment
+        // uses (matches what the api-server/front send) and our internal handledAnalytics key.
+        const id = String(analysisNode._server_id);
 
         // Gate on lifecycle status — only run Active analyses.
         const isActive = await spinalAnalyticNodeManagerService.isAnalysisActive(analysisNode);
@@ -207,7 +209,7 @@ class SpinalOrganAnalysis {
   // ─── ANALYSIS SETUP ───────────────────────────────────
 
   private async setupAnalysis(analysisNode: SpinalNode<any>, revision: number = 0): Promise<void> {
-    const id = analysisNode.getId().get();
+    const id = String(analysisNode._server_id);
     const name = analysisNode.getName().get();
     console.log(`[Organ] Setting up analysis: ${name} (${id})`);
 
@@ -480,11 +482,19 @@ async function main() {
 
   // Periodically re-sync to pick up new/removed analyses
   const pollInterval = parseInt(process.env.UPDATE_ANALYTIC_QUEUE_TIMER ?? '30000');
+  // Two syncs running at once would both set up a new analysis, and the first
+  // setup's intervals and binds would keep running alongside the second's. A sync
+  // can outlast the interval: a large graph, or loads waiting for the hub to come back.
+  let syncing = false;
   setInterval(async () => {
+    if (syncing) return;
+    syncing = true;
     try {
       await organ.syncAnalytics();
     } catch (e: any) {
       console.error(`[Organ] Sync error: ${e.message}`);
+    } finally {
+      syncing = false;
     }
   }, pollInterval);
 }
