@@ -8,3 +8,14 @@ DIGITALTWIN_PATH="/__users__/admin/Digital twin VF"
 UPDATE_ANALYTIC_QUEUE_TIMER = 10000 #Frenquency at which the organ will look for new analytics to handle
 ORGAN_NAME="Analytic_Organ"
 REPORT_TIMER = 30000 #Frenquency at which the organ will produce a report.
+
+# Mail sent by the SEND_MAIL block (needs spinal-service-mailer installed in this organ).
+# Company no-reply through an IP-authenticated relay: leave SMTP_EMAIL / SMTP_PASS unset.
+SMTP_HOST="smtp-relay.gmail.com"
+SMTP_PORT=587
+SMTP_SECURE=false
+#SMTP_NAME="spinalcom.com"            # EHLO hostname, if the relay requires it
+#SMTP_EMAIL="bot@company.com"         # only for an account login, with SMTP_PASS
+#SMTP_PASS="app-password"
+MAIL_FROM="no-reply@spinalcom.com"
+MAIL_MAX_PER_MINUTE=60                # safety cap for this organ (0 = no cap)

@@ -26,6 +26,7 @@
     "spinal-env-viewer-graph-service": "Spinal-Graph-Service",
     "spinal-lib-organ-monitoring": "spinal-lib-organ-monitoring",
     "spinal-model-analysis": "spinal-model-analysis",
-    "spinal-model-graph": "spinal-model-graph"
+    "spinal-model-graph": "spinal-model-graph",
+    "spinal-service-mailer": "spinal-service-mailer"
   }
 }

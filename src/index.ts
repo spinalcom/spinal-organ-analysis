@@ -21,12 +21,14 @@ import {
 import type {
   IResolvedTrigger,
   ICOVBindingResult,
+  ICOVBindingResolution,
   AnalysisExecutionResult,
   ExecutionMetadata,
   AnalysisAssignmentModel,
 } from 'spinal-model-analysis';
 import { CronJob } from 'cron';
 import { performance } from 'perf_hooks';
+import { covBindingKey, modelSnapshot, planCOVRefresh } from './covBindings';
 
 require('dotenv').config();
 
@@ -48,6 +50,10 @@ interface AnalyticHandle {
   intervals: NodeJS.Timeout[];
   cronJobs: CronJob[];
   bindings: COVBinding[];
+  /** The analysis's COV triggers; its binds are re-synced with its work nodes on every sync. */
+  covTriggers: IResolvedTrigger[];
+  /** Work nodes already reported as not bindable, so a retry each sync doesn't repeat the warning. */
+  warnedSkips: Set<string>;
   /** lastUpdate revision the analysis was set up with; used to detect config changes. */
   revision: number;
 }
@@ -188,7 +194,11 @@ class SpinalOrganAnalysis {
             );
             this.clearAnalytic(id);
             await this.setupAnalysis(analysisNode, revision);
+            continue;
           }
+          // Same definition, but its work nodes may have changed (e.g. tickets created or
+          // deleted since): bind the new ones, unbind the removed ones.
+          await this.refreshCOVBindings(analysisNode, handle);
           continue;
         }
 
@@ -217,6 +227,8 @@ class SpinalOrganAnalysis {
       intervals: [],
       cronJobs: [],
       bindings: [],
+      covTriggers: [],
+      warnedSkips: new Set(),
       revision,
     };
     this.handledAnalytics.set(id, handle);
@@ -243,12 +255,15 @@ class SpinalOrganAnalysis {
           this.setupCronTrigger(analysisNode, trigger, handle);
           break;
         case TRIGGER_TYPE.COV:
-          await this.setupCOVTrigger(analysisNode, trigger, handle);
+          this.registerCOVTrigger(analysisNode, trigger, handle);
           break;
         default:
           console.warn(`[Organ] Unknown trigger type: ${(trigger as any).type}`);
       }
     }
+
+    // Bind every COV trigger on the current work nodes (later syncs keep these binds up to date).
+    await this.refreshCOVBindings(analysisNode, handle);
   }
 
   // ─── INTERVAL TRIGGER ─────────────────────────────────
@@ -307,11 +322,11 @@ class SpinalOrganAnalysis {
 
   // ─── COV TRIGGER ──────────────────────────────────────
 
-  private async setupCOVTrigger(
+  private registerCOVTrigger(
     analysisNode: SpinalNode<any>,
     trigger: IResolvedTrigger,
     handle: AnalyticHandle
-  ): Promise<void> {
+  ): void {
     const registerName = trigger.inputRegister;
     if (!registerName) {
       console.warn(`[Organ] COV trigger missing inputRegister for ${analysisNode.getName().get()}`);
@@ -322,66 +337,137 @@ class SpinalOrganAnalysis {
       (trigger.threshold !== undefined ? ` (threshold: ${trigger.threshold})` : '') +
       (trigger.id ? ` (${trigger.id})` : '')
     );
+    handle.covTriggers.push(trigger);
+  }
 
-    let bindings: ICOVBindingResult[];
+  /**
+   * Brings an analysis's COV binds in line with its CURRENT work nodes. Runs at setup and on every
+   * sync, so a work node that appears later (e.g. a ticket created after the organ started) is
+   * bound within one poll interval, and one that disappears (a deleted ticket) is unbound. Only the
+   * work nodes missing a bind run the input workflow. If the work nodes can't be resolved, the
+   * existing binds are kept as they are.
+   */
+  private async refreshCOVBindings(analysisNode: SpinalNode<any>, handle: AnalyticHandle): Promise<void> {
+    if (handle.covTriggers.length === 0) return;
+    const name = analysisNode.getName().get();
+
+    let workNodes: SpinalNode<any>[];
     try {
-      bindings = await spinalAnalysisTriggerService.resolveInputRegistersForBinding(analysisNode);
+      workNodes = await spinalAnalysisTriggerService.resolveCOVWorkNodes(analysisNode);
     } catch (e: any) {
-      console.error(`[Organ] COV resolution failed for ${analysisNode.getName().get()}: ${e.message}`);
+      console.error(`[Organ] COV work-node resolution failed for ${name}: ${e.message}. Keeping the current binds.`);
       return;
     }
 
-    // Filter only bindings matching this trigger's register
-    const matchingBindings = bindings.filter((b) => b.inputRegister === registerName);
+    const { keep, drop, toBind } = planCOVRefresh(handle.bindings, workNodes, handle.covTriggers);
+    for (const binding of drop) binding.model.unbind(binding.bindProcess);
+    handle.bindings = keep;
 
-    for (const binding of matchingBindings) {
-      const model = binding.model as Model;
-      if (!model || typeof model.bind !== 'function') {
-        console.warn(`[Organ] COV model for register "${registerName}" is not bindable. Skipping.`);
-        continue;
+    let added = 0;
+    if (toBind.length > 0) {
+      let resolution: ICOVBindingResolution;
+      try {
+        resolution = await spinalAnalysisTriggerService.resolveCOVBindings(analysisNode, toBind);
+      } catch (e: any) {
+        console.error(`[Organ] COV binding resolution failed for ${name}: ${e.message}`);
+        resolution = { bindings: [], skipped: [] };
       }
 
-      let previousValue: unknown = typeof model.get === 'function' ? model.get() : undefined;
-
-      const bindProcess = model.bind(() => {
-        const currentValue = typeof model.get === 'function' ? model.get() : undefined;
-
-        // Threshold check
-        if (trigger.threshold !== undefined) {
-          const prev = Number(previousValue);
-          const curr = Number(currentValue);
-          if (!isNaN(prev) && !isNaN(curr) && Math.abs(curr - prev) <= trigger.threshold) {
-            return; // Change below threshold, skip
-          }
+      const bound = new Set(
+        handle.bindings.map((b) => covBindingKey(b.workNode, { id: b.triggerId, inputRegister: b.inputRegister }))
+      );
+      for (const binding of resolution.bindings) {
+        const trigger = handle.covTriggers.find(
+          (t) => t.id === binding.triggerId && t.inputRegister === binding.inputRegister
+        );
+        if (!trigger) continue;
+        const key = covBindingKey(binding.workNode, trigger);
+        if (bound.has(key)) continue;
+        if (this.bindCOV(analysisNode, trigger, binding, handle)) {
+          bound.add(key);
+          added++;
         }
-
-        // Skip if value unchanged
-        if (currentValue === previousValue) return;
-
-        previousValue = currentValue;
-        // COV fires per bound model, so only run the work node that owns it —
-        // not the whole analysis (which would re-run every work node).
-        this.executeAnalysisForWorkNode(analysisNode, binding.workNode, {
-          referenceTime: Date.now(),
-          trigger: {
-            id: trigger.id,
-            type: TRIGGER_TYPE.COV,
-            inputRegister: registerName,
-            threshold: trigger.threshold,
-          },
-        });
-      }, false);
-
-      handle.bindings.push({
-        triggerId: trigger.id,
-        inputRegister: registerName,
-        workNode: binding.workNode,
-        model,
-        bindProcess,
-        threshold: trigger.threshold,
-        previousValue,
-      });
+      }
+      for (const skip of resolution.skipped) {
+        this.warnOnce(
+          handle,
+          `${skip.workNode.getId().get()}|${skip.triggerId ?? ''}|${skip.inputRegister ?? ''}|${skip.reason}`,
+          `[Organ] "${name}": not binding "${skip.workNode.getName().get()}" yet — ${skip.reason}. Retried on every sync.`
+        );
+      }
     }
+
+    if (added > 0 || drop.length > 0) {
+      console.log(`[Organ] "${name}": COV binds +${added} / -${drop.length} → ${handle.bindings.length} active`);
+    }
+  }
+
+  /** Binds one work node's model for one COV trigger. Returns false if the model can't be bound. */
+  private bindCOV(
+    analysisNode: SpinalNode<any>,
+    trigger: IResolvedTrigger,
+    binding: ICOVBindingResult,
+    handle: AnalyticHandle
+  ): boolean {
+    const registerName = trigger.inputRegister!;
+    const model = binding.model as Model;
+    if (!model || typeof model.bind !== 'function') {
+      this.warnOnce(
+        handle,
+        `${binding.workNode.getId().get()}|${trigger.id ?? ''}|${registerName}|not bindable`,
+        `[Organ] COV model for register "${registerName}" on "${binding.workNode.getName().get()}" is not bindable. Skipping.`
+      );
+      return false;
+    }
+
+    // Compared by content: an attribute model's get() returns a new object on every call.
+    let previousValue: unknown = modelSnapshot(model);
+
+    const bindProcess = model.bind(() => {
+      const currentValue = modelSnapshot(model);
+
+      // Threshold check
+      if (trigger.threshold !== undefined) {
+        const prev = Number(previousValue);
+        const curr = Number(currentValue);
+        if (!isNaN(prev) && !isNaN(curr) && Math.abs(curr - prev) <= trigger.threshold) {
+          return; // Change below threshold, skip
+        }
+      }
+
+      // Skip if value unchanged
+      if (currentValue === previousValue) return;
+
+      previousValue = currentValue;
+      // COV fires per bound model, so only run the work node that owns it —
+      // not the whole analysis (which would re-run every work node).
+      this.executeAnalysisForWorkNode(analysisNode, binding.workNode, {
+        referenceTime: Date.now(),
+        trigger: {
+          id: trigger.id,
+          type: TRIGGER_TYPE.COV,
+          inputRegister: registerName,
+          threshold: trigger.threshold,
+        },
+      });
+    }, false);
+
+    handle.bindings.push({
+      triggerId: trigger.id,
+      inputRegister: registerName,
+      workNode: binding.workNode,
+      model,
+      bindProcess,
+      threshold: trigger.threshold,
+      previousValue,
+    });
+    return true;
+  }
+
+  private warnOnce(handle: AnalyticHandle, key: string, message: string): void {
+    if (handle.warnedSkips.has(key)) return;
+    handle.warnedSkips.add(key);
+    console.warn(message);
   }
 
   // ─── EXECUTION ────────────────────────────────────────
